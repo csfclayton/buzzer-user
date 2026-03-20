@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>小天才搶答器</title>
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; text-align: center; background: #eef2f3; margin: 0; padding: 20px; }
+        .container { max-width: 400px; margin: auto; }
+        #buzzer { 
+            width: 200px; height: 200px; border-radius: 50%; 
+            background: radial-gradient(#ff4757, #ff6b81); color: white; 
+            font-size: 28px; font-weight: bold; border: 8px solid #fff;
+            cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            transition: 0.1s; margin-top: 30px;
+        }
+        #buzzer:active { transform: scale(0.95); box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        #buzzer:disabled { background: #bdc3c7; border-color: #ecf0f1; box-shadow: none; }
+        #status { margin-top: 30px; font-size: 22px; color: #2c3e50; min-height: 1.5em; }
+        input { padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; width: 80%; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🏆 搶答大挑戰</h2>
+        <input type="text" id="username" placeholder="請輸入名字...">
+        <br>
+        <button id="buzzer" onclick="pressButton()">按我搶答！</button>
+        <div id="status">準備好就緒</div>
+        
+        <hr style="margin-top: 50px; border: 0; border-top: 1px solid #ccc;">
+    </div>
+
+    <script>
+        const ably = new Ably.Realtime('Nta7rA.R_3OIg:p4OAZ8Z8_mgfKaLTDl1rPWiKn7aMb12txQ2H2s8EuLo');
+        const channel = ably.channels.get('quiz-room');
+        let hasWinner = false;
+
+        channel.subscribe('buzz', (msg) => {
+            if (!hasWinner) {
+                hasWinner = true;
+                document.getElementById('buzzer').disabled = true;
+                document.getElementById('status').innerHTML = "🎊 <b style='color:#27ae60'>" + msg.data.name + "</b> 搶到了！";
+            }
+        });
+
+        channel.subscribe('reset', () => {
+            hasWinner = false;
+            document.getElementById('buzzer').disabled = false;
+            document.getElementById('status').innerText = "開始搶答！";
+        });
+
+        function pressButton() {
+            const name = document.getElementById('username').value || "神秘玩家";
+            if (!hasWinner) {
+                // Android 手機按下時會震動一下
+                if (navigator.vibrate) navigator.vibrate(100); 
+                channel.publish('buzz', { name: name });
+            }
+        }
+
+        function resetGame() {
+            channel.publish('reset', {});
+        }
+    </script>
+</body>
+</html>
