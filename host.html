@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="搶答主持">
+  <title>主持 · 小天才搶答器</title>
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #e7eef0;
+      --card: #fff;
+      --ink: #1c2833;
+      --muted: #5c6b73;
+      --line: #d5dee2;
+      --red: #e23d4a;
+      --red-deep: #c42e3a;
+      --green: #1f7a45;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    button, input, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+    header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .brand { margin: 0; font-size: 14px; letter-spacing: 0.18em; color: var(--muted); font-weight: 700; }
+    .icon-btn, .text-btn, .step, .score-btn {
+      min-height: 44px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--card);
+    }
+    .icon-btn { min-width: 44px; padding: 0 14px; }
+    .text-btn { padding: 0 16px; background: transparent; }
+    .text-btn.danger { color: var(--red); border-color: transparent; }
+    .top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-end; margin-top: 18px; }
+    .code { margin: 0; font-size: clamp(44px, 8vw, 84px); letter-spacing: 0.18em; line-height: 0.95; }
+    .link-row { display: flex; gap: 8px; align-items: center; width: min(100%, 460px); }
+    #player-link {
+      flex: 1;
+      min-width: 0;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0 12px;
+      background: var(--card);
+      font-size: 16px;
+    }
+    .layout { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 16px; margin-top: 18px; }
+    .card { background: var(--card); border-radius: 22px; padding: 18px; box-shadow: 0 10px 30px rgba(28, 40, 51, 0.06); }
+    .label { margin: 0; color: var(--muted); font-size: 13px; letter-spacing: 0.14em; }
+    textarea {
+      width: 100%;
+      margin-top: 8px;
+      border: 0;
+      resize: none;
+      background: transparent;
+      font-size: 28px;
+      line-height: 1.35;
+      font-weight: 700;
+      padding: 0;
+    }
+    .stage { margin-top: 8px; }
+    .winner {
+      background: var(--red);
+      color: #fff;
+      border-radius: 22px;
+      padding: 28px 22px;
+    }
+    .winner .label, .live-note, .delta { color: rgba(255,255,255,0.82); }
+    .winner-name { margin: 8px 0 0; font-size: clamp(42px, 7vw, 84px); line-height: 0.95; word-break: break-word; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .primary, .ghost, .quiet {
+      min-height: 52px;
+      padding: 0 18px;
+      border-radius: 999px;
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .primary { background: var(--green); color: #fff; border: 0; }
+    .ghost { background: var(--card); border: 1px solid var(--line); }
+    .quiet { background: transparent; border: 0; color: var(--muted); }
+    .circle {
+      width: min(46vw, 210px);
+      height: min(46vw, 210px);
+      border-radius: 50%;
+      border: 8px solid #fff;
+      background: radial-gradient(circle at 40% 35%, #ff7380, var(--red) 52%, var(--red-deep));
+      color: #fff;
+      font-size: 24px;
+      font-weight: 800;
+      box-shadow: 0 10px 24px rgba(226, 61, 74, 0.28);
+    }
+    .live-row { display: flex; align-items: center; gap: 10px; font-size: 32px; font-weight: 800; margin: 8px 0; }
+    .dot {
+      width: 12px; height: 12px; border-radius: 50%; background: var(--red);
+      box-shadow: 0 0 0 0 rgba(226, 61, 74, 0.6);
+      animation: pulse 1.4s ease-out infinite;
+    }
+    @keyframes pulse {
+      70% { box-shadow: 0 0 0 10px rgba(226, 61, 74, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(226, 61, 74, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+    .hint, .sub { color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .err { color: var(--red); min-height: 1.2em; margin: 8px 0 0; }
+    .side { display: flex; flex-direction: column; gap: 16px; }
+    .row-head, .score-row, .time-row, .hist-row {
+      display: flex; align-items: center; gap: 8px; justify-content: space-between;
+    }
+    .steps { display: flex; gap: 4px; }
+    .step { min-width: 44px; padding: 0 10px; }
+    .step.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .score-row, .time-row, .hist-row { padding: 8px 0; border-top: 1px solid var(--line); }
+    .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pts { width: 42px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+    .score-btn { width: 44px; height: 44px; padding: 0; }
+    .mark { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .win-name { font-weight: 800; }
+    .scroll { max-height: 260px; overflow: auto; }
+    .footer { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .pill { min-height: 32px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; font-size: 14px; }
+    .pill.wait { border: 1px solid var(--line); color: var(--muted); }
+    .pill.live { background: var(--red); color: #fff; }
+    .pill.got { background: var(--ink); color: #fff; }
+    .names { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <p class="brand">小天才搶答器 · 主持</p>
+      <div>
+        <span class="pill wait" id="conn">連線中</span>
+        <button class="icon-btn" id="sound" type="button">音效開</button>
+      </div>
+    </header>
+
+    <div class="top">
+      <div>
+        <p class="label">房號</p>
+        <p class="code" id="code">----</p>
+      </div>
+      <div style="flex:1; min-width: 240px;">
+        <p class="label">選手連結</p>
+        <div class="link-row">
+          <input id="player-link" readonly>
+          <button class="icon-btn" id="copy" type="button">複製</button>
+        </div>
+        <p class="hint">用 Safari 開呢頁。選手連結可以 AirDrop。唔好把呢頁俾學生。</p>
+      </div>
+    </div>
+
+    <div class="layout">
+      <section>
+        <label class="label" for="question">題目，選手手機會見到</label>
+        <textarea id="question" rows="2" maxlength="200" placeholder="這一題要問什麼？"></textarea>
+        <div class="card stage" id="stage"></div>
+        <p class="err" id="error"></p>
+        <p class="hint">有鍵盤：空白鍵開放搶答，Enter 答對並下一題。主持頁唔好關。</p>
+      </section>
+      <aside class="side">
+        <section class="card">
+          <div class="row-head">
+            <h2 class="label">分數</h2>
+            <div class="steps" id="steps">
+              <button class="step" type="button" data-step="5">5</button>
+              <button class="step" type="button" data-step="10">10</button>
+              <button class="step" type="button" data-step="20">20</button>
+            </div>
+          </div>
+          <div id="scores"></div>
+        </section>
+        <section class="card">
+          <h2 class="label">在線 <span id="online-count">0</span></h2>
+          <div class="names" id="online"></div>
+          <h2 class="label" style="margin-top:16px">這一題的順序</h2>
+          <div class="scroll" id="timeline"></div>
+        </section>
+        <section class="card">
+          <h2 class="label">前面幾題</h2>
+          <div class="scroll" id="history"></div>
+        </section>
+      </aside>
+    </div>
+
+    <footer class="footer">
+      <button class="text-btn" id="simulate" type="button">模擬選手按下</button>
+      <button class="text-btn" id="skip" type="button">直接下一題</button>
+      <button class="text-btn danger" id="clear" type="button">清空分數</button>
+      <button class="text-btn danger" id="new-room" type="button">開新房號</button>
+    </footer>
+  </main>
+  <script>
+    const KEY = "Nta7rA.R_3OIg:p4OAZ8Z8_mgfKaLTDl1rPWiKn7aMb12txQ2H2s8EuLo";
+    const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const stage = document.getElementById("stage");
+    const questionEl = document.getElementById("question");
+    const errorEl = document.getElementById("error");
+    const codeEl = document.getElementById("code");
+    const linkEl = document.getElementById("player-link");
+    const connEl = document.getElementById("conn");
+    const soundBtn = document.getElementById("sound");
+    const scoresEl = document.getElementById("scores");
+    const timelineEl = document.getElementById("timeline");
+    const historyEl = document.getElementById("history");
+    const onlineEl = document.getElementById("online");
+    const onlineCountEl = document.getElementById("online-count");
+
+    let ably = null;
+    let channel = null;
+    let room = "";
+    let seq = 0;
+    let round = 1;
+    let phase = "hold";
+    let question = "";
+    let pointStep = 10;
+    let soundOn = true;
+    let scores = {};
+    let historyList = [];
+    let buzzes = [];
+    let fouls = [];
+    let passed = {};
+    let forgiven = {};
+    let online = [];
+    let lastHitSound = "";
+    let confirmClear = false;
+    let confirmRoom = false;
+    let audioCtx = null;
+    let qTimer = 0;
+
+    function esc(value) {
+      return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+        if (ch === "&") return "&" + "amp;";
+        if (ch === "<") return "&" + "lt;";
+        if (ch === ">") return "&" + "gt;";
+        if (ch === '"') return "&" + "quot;";
+        return "&#" + "39;";
+      });
+    }
+    function cleanName(raw) {
+      const next = String(raw || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 12);
+      return next || "神秘玩家";
+    }
+    function normalizeRoom(raw) {
+      const code = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+      return /^[A-Z0-9]{4}$/.test(code) ? code : "";
+    }
+    function makeRoom() {
+      let code = "";
+      for (let i = 0; i < 4; i += 1) code += ALPH[Math.floor(Math.random() * ALPH.length)];
+      return code;
+    }
+    function fresh() {
+      return {
+        seq: 0, round: 1, phase: "hold", question: "", pointStep: 10,
+        scores: {}, history: [], buzzes: [], fouls: [], passed: {}, forgiven: {}
+      };
+    }
+    function winner() {
+      return buzzes.find(function (buzz) { return !passed[buzz.id]; }) || null;
+    }
+    function fmtDelta(ms) {
+      const sign = ms > 0 ? "+" : "";
+      return sign + (ms / 1000).toFixed(2) + "秒";
+    }
+    function playerUrl() {
+      const url = new URL("index.html", location.href);
+      url.search = "?room=" + room;
+      url.hash = "";
+      return url.toString();
+    }
+    function unlockAudio() {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audioCtx = audioCtx || new Ctx();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    }
+    function tone(freq, dur) {
+      if (!soundOn || !audioCtx) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + dur + 0.02);
+    }
+    function playHit() { tone(880, 0.16); setTimeout(function () { tone(1175, 0.18); }, 90); }
+    function playFoul() { tone(196, 0.22); }
+    function playArm() { tone(523, 0.12); }
+
+    function save() {
+      localStorage.setItem("buzzer-host:" + room, JSON.stringify({
+        seq: seq, round: round, phase: phase, question: question, pointStep: pointStep,
+        scores: scores, history: historyList, buzzes: buzzes, fouls: fouls,
+        passed: passed, forgiven: forgiven
+      }));
+      localStorage.setItem("buzzer-host-last", room);
+      localStorage.setItem("buzzer-host-sound", soundOn ? "on" : "off");
+    }
+    function load(nextRoom) {
+      try {
+        const raw = localStorage.getItem("buzzer-host:" + nextRoom);
+        if (!raw) return fresh();
+        const data = JSON.parse(raw);
+        const base = fresh();
+        if (!data || typeof data !== "object") return base;
+        base.seq = Number(data.seq) || 0;
+        base.round = Number(data.round) || 1;
+        base.phase = data.phase === "live" ? "live" : "hold";
+        base.question = String(data.question || "").slice(0, 200);
+        base.pointStep = [5, 10, 20].indexOf(data.pointStep) === -1 ? 10 : data.pointStep;
+        base.scores = data.scores && typeof data.scores === "object" ? data.scores : {};
+        base.history = Array.isArray(data.history) ? data.history.slice(0, 30) : [];
+        base.buzzes = Array.isArray(data.buzzes) ? data.buzzes : [];
+        base.fouls = Array.isArray(data.fouls) ? data.fouls : [];
+        base.passed = data.passed && typeof data.passed === "object" ? data.passed : {};
+        base.forgiven = data.forgiven && typeof data.forgiven === "object" ? data.forgiven : {};
+        return base;
+      } catch (err) {
+        return fresh();
+      }
+    }
+    function applyState(data) {
+      seq = data.seq;
+      round = data.round;
+      phase = data.phase;
+      question = data.question;
+      pointStep = data.pointStep;
+      scores = data.scores;
+      historyList = data.history;
+      buzzes = data.buzzes;
+      fouls = data.fouls;
+      passed = data.passed;
+      forgiven = data.forgiven;
+      lastHitSound = winner() ? winner().id : "";
+    }
+    function touchScore(id, playerName) {
+      if (!scores[id]) scores[id] = { name: playerName, score: 0 };
+      else scores[id].name = playerName;
+    }
+    function publishControl() {
+      save();
+      if (!channel || !ably || ably.connection.state !== "connected") return;
+      seq += 1;
+      const current = winner();
+      channel.publish("control", {
+        seq: seq,
+        room: room,
+        round: round,
+        phase: phase,
+        question: question,
+        winnerId: current ? current.id : null,
+        winnerName: current ? current.name : null,
+        forgiven: Object.keys(forgiven),
+        passed: Object.keys(passed)
+      });
+      save();
+    }
+    function noteWinnerSound() {
+      const current = winner();
+      const id = current ? current.id : "";
+      if (id && id !== lastHitSound) {
+        lastHitSound = id;
+        playHit();
+      }
+      if (!id) lastHitSound = "";
+    }
+    function acceptBuzz(data) {
+      const id = String(data.id || "").slice(0, 40);
+      const playerName = cleanName(data.name);
+      if (!id) return;
+      if (buzzes.some(function (buzz) { return buzz.id === id; })) return;
+      if (phase !== "live" || fouls.some(function (foul) { return foul.id === id; })) {
+        acceptFoul({ id: id, name: playerName });
+        return;
+      }
+      buzzes.push({ id: id, name: playerName, at: Date.now() });
+      touchScore(id, playerName);
+      noteWinnerSound();
+      publishControl();
+      render();
+    }
+    function acceptFoul(data) {
+      const id = String(data.id || "").slice(0, 40);
+      const playerName = cleanName(data.name);
+      if (!id) return;
+      if (forgiven[id]) return;
+      if (fouls.some(function (foul) { return foul.id === id; })) return;
+      fouls.push({ id: id, name: playerName, at: Date.now() });
+      touchScore(id, playerName);
+      playFoul();
+      publishControl();
+      render();
+    }
+    function openRound() {
+      if (phase === "live") return;
+      unlockAudio();
+      phase = "live";
+      buzzes = [];
+      passed = {};
+      lastHitSound = "";
+      confirmClear = false;
+      confirmRoom = false;
+      if (channel) channel.publish("reset", {});
+      publishControl();
+      playArm();
+      render();
+    }
+    function holdRound() {
+      if (phase !== "live" || buzzes.length) return;
+      phase = "hold";
+      publishControl();
+      render();
+    }
+    function nextRound(givePoints) {
+      const current = winner();
+      if (givePoints && current) {
+        touchScore(current.id, current.name);
+        scores[current.id].score += pointStep;
+        historyList.unshift({ round: round, name: current.name, question: question.slice(0, 40) });
+        historyList = historyList.slice(0, 30);
+      }
+      round += 1;
+      phase = "hold";
+      buzzes = [];
+      fouls = [];
+      passed = {};
+      forgiven = {};
+      lastHitSound = "";
+      if (channel) channel.publish("reset", {});
+      publishControl();
+      render();
+    }
+    function passToNext() {
+      const current = winner();
+      if (!current) return;
+      passed[current.id] = true;
+      noteWinnerSound();
+      publishControl();
+      render();
+    }
+    function awardOnly() {
+      const current = winner();
+      if (!current) return;
+      touchScore(current.id, current.name);
+      scores[current.id].score += pointStep;
+      save();
+      render();
+    }
+    function deltaScore(id, playerName, delta) {
+      touchScore(id, playerName);
+      scores[id].score += delta;
+      save();
+      render();
+    }
+    function forgive(id) {
+      forgiven[id] = true;
+      fouls = fouls.filter(function (foul) { return foul.id !== id; });
+      publishControl();
+      render();
+    }
+    function setError(text) {
+      errorEl.textContent = text || "";
+    }
+
+    function renderStage() {
+      const current = winner();
+      const hits = buzzes.filter(function (buzz) { return !passed[buzz.id]; });
+      const follow = hits[1];
+      if (current) {
+        const delta = follow ? fmtDelta(follow.at - current.at) : "";
+        stage.innerHTML =
+          '<div class="winner"><p class="label">第 ' + round + ' 題 · 第一名</p>' +
+          '<p class="winner-name">' + esc(current.name) + '</p>' +
+          '<p class="delta">' + (follow ? "下一位 " + esc(follow.name) + " " + esc(delta) : "暫時未有下一位") + '</p></div>' +
+          '<div class="actions">' +
+          '<button class="primary" type="button" data-act="award-next">答對 +' + pointStep + '，下一題</button>' +
+          '<button class="ghost" type="button" data-act="pass">答錯，換下一位</button>' +
+          '<button class="quiet" type="button" data-act="award-only">只加分</button></div>';
+        return;
+      }
+      if (phase === "live") {
+        stage.innerHTML =
+          '<div class="live-row"><span class="dot"></span>搶答開放</div>' +
+          '<p class="sub">等第一個按下。提前按過嘅人呢題按唔到。</p>' +
+          '<div class="actions"><button class="ghost" type="button" data-act="hold">收回，還沒人按</button></div>';
+        return;
+      }
+      stage.innerHTML =
+        '<button class="circle" type="button" data-act="open">開放搶答</button>' +
+        '<p class="sub">題目唸完先按。開放前按下算犯規。</p>';
+    }
+    function renderScores() {
+      const rows = Object.keys(scores).map(function (id) {
+        return { id: id, name: scores[id].name, score: Number(scores[id].score) || 0 };
+      }).sort(function (a, b) {
+        return b.score - a.score || a.name.localeCompare(b.name, "zh-Hant");
+      });
+      document.querySelectorAll(".step").forEach(function (button) {
+        button.classList.toggle("on", Number(button.dataset.step) === pointStep);
+      });
+      if (!rows.length) {
+        scoresEl.innerHTML = '<p class="sub">未有選手。叫佢哋打開連結，或者先模擬一個。</p>';
+        return;
+      }
+      const current = winner();
+      scoresEl.innerHTML = rows.map(function (row) {
+        const locked = fouls.some(function (foul) { return foul.id === row.id; });
+        return '<div class="score-row"><span class="who ' + (current && current.id === row.id ? "win-name" : "") + '">' +
+          esc(row.name) + (locked ? " · 犯規" : "") + '</span><span class="pts">' + row.score + '</span>' +
+          '<button class="score-btn" type="button" data-act="minus" data-id="' + esc(row.id) + '" data-name="' + esc(row.name) + '">−</button>' +
+          '<button class="score-btn" type="button" data-act="plus" data-id="' + esc(row.id) + '" data-name="' + esc(row.name) + '">+</button></div>';
+      }).join("") + fouls.map(function (foul) {
+        return '<button class="text-btn" type="button" data-act="forgive" data-id="' + esc(foul.id) + '">恢復' + esc(foul.name) + '</button>';
+      }).join("");
+    }
+    function renderTimeline() {
+      if (!buzzes.length && !fouls.length) {
+        timelineEl.innerHTML = '<p class="sub">還沒有人按。</p>';
+        return;
+      }
+      const first = buzzes.length ? buzzes[0].at : 0;
+      const rows = buzzes.map(function (buzz) {
+        return { id: buzz.id, name: buzz.name, at: buzz.at, kind: passed[buzz.id] ? "passed" : "hit" };
+      }).concat(fouls.map(function (foul) {
+        return { id: foul.id, name: foul.name, at: foul.at, kind: "foul" };
+      })).sort(function (a, b) { return a.at - b.at; });
+      let place = 0;
+      timelineEl.innerHTML = rows.map(function (row) {
+        const rank = row.kind === "foul" ? "·" : String(++place);
+        const label = row.kind === "foul" ? "犯規" : row.kind === "passed" ? "已換人" : fmtDelta(row.at - first);
+        return '<div class="time-row"><span class="who"><span class="mark">' + rank + '</span> ' + esc(row.name) +
+          '</span><span class="mark">' + esc(label) + '</span></div>';
+      }).join("");
+    }
+    function renderHistory() {
+      if (!historyList.length) {
+        historyEl.innerHTML = '<p class="sub">未有紀錄。</p>';
+        return;
+      }
+      historyEl.innerHTML = historyList.map(function (item) {
+        return '<div class="hist-row"><span class="mark">第 ' + esc(item.round) + ' 題</span><span class="who">' + esc(item.name) + '</span></div>';
+      }).join("");
+    }
+    function renderOnline() {
+      onlineCountEl.textContent = String(online.length);
+      onlineEl.innerHTML = online.slice(0, 24).map(function (person) {
+        return '<span class="chip">' + esc(person.name) + '</span>';
+      }).join("");
+    }
+    function render() {
+      codeEl.textContent = room || "----";
+      linkEl.value = room ? playerUrl() : "";
+      if (document.activeElement !== questionEl && questionEl.value !== question) questionEl.value = question;
+      const current = winner();
+      connEl.textContent = connectionLabel() + " · 第 " + round + " 題";
+      connEl.className = "pill " + (phase === "live" ? (current ? "got" : "live") : "wait");
+      if (phase === "live" && current) connEl.textContent = "已有人搶到 · 第 " + round + " 題";
+      else if (phase === "live") connEl.textContent = "搶答中 · 第 " + round + " 題";
+      else connEl.textContent = connectionLabel() + " · 準備中";
+      soundBtn.textContent = soundOn ? "音效開" : "音效關";
+      document.getElementById("clear").textContent = confirmClear ? "確定清空分數" : "清空分數";
+      document.getElementById("new-room").textContent = confirmRoom ? "確定開新房" : "開新房號";
+      renderStage();
+      renderScores();
+      renderTimeline();
+      renderHistory();
+      renderOnline();
+    }
+    function connectionLabel() {
+      if (!ably) return "未連線";
+      const state = ably.connection.state;
+      if (state === "connected") return "已連線";
+      if (state === "connecting" || state === "initialized") return "連線中";
+      if (state === "suspended" || state === "disconnected") return "重新連線";
+      if (state === "failed") return "連唔上";
+      return "連線中";
+    }
+    function refreshOnline() {
+      if (!channel) return;
+      channel.presence.get(function (err, members) {
+        if (err || !members) return;
+        online = members.map(function (member) { return member.data || {}; }).filter(function (data) {
+          return data.role !== "host" && data.name;
+        }).map(function (data) {
+          return { id: data.id || data.name, name: cleanName(data.name) };
+        });
+        renderOnline();
+      });
+    }
+    function join(nextRoom, isFresh) {
+      if (channel) {
+        channel.unsubscribe();
+        channel.presence.leave().catch(function () {});
+      }
+      room = nextRoom;
+      const url = new URL(location.href);
+      url.search = "?room=" + room;
+      history.replaceState(null, "", url.pathname + url.search);
+      applyState(isFresh ? fresh() : load(room));
+      channel = ably.channels.get("quiz-" + room);
+      channel.subscribe("buzz", function (msg) { acceptBuzz(msg.data || {}); });
+      channel.subscribe("foul", function (msg) { acceptFoul(msg.data || {}); });
+      channel.presence.subscribe(refreshOnline);
+      channel.presence.enter({ name: "主持", id: "host", role: "host" }).then(refreshOnline).catch(function () {});
+      publishControl();
+      render();
+    }
+
+    stage.addEventListener("click", function (event) {
+      const button = event.target.closest("button");
+      if (!button) return;
+      setError("");
+      const act = button.dataset.act;
+      if (act === "open") openRound();
+      if (act === "hold") holdRound();
+      if (act === "award-next") nextRound(true);
+      if (act === "pass") passToNext();
+      if (act === "award-only") awardOnly();
+    });
+    scoresEl.addEventListener("click", function (event) {
+      const button = event.target.closest("button");
+      if (!button) return;
+      if (button.dataset.act === "forgive") forgive(button.dataset.id);
+      if (button.dataset.act === "plus") deltaScore(button.dataset.id, button.dataset.name, pointStep);
+      if (button.dataset.act === "minus") deltaScore(button.dataset.id, button.dataset.name, -pointStep);
+    });
+    document.getElementById("steps").addEventListener("click", function (event) {
+      const button = event.target.closest("button");
+      if (!button) return;
+      pointStep = Number(button.dataset.step);
+      save();
+      render();
+    });
+    questionEl.addEventListener("input", function () {
+      question = questionEl.value.slice(0, 200);
+      window.clearTimeout(qTimer);
+      qTimer = window.setTimeout(publishControl, 400);
+    });
+    document.getElementById("copy").addEventListener("click", async function () {
+      const text = playerUrl();
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (err) {
+        linkEl.focus();
+        linkEl.select();
+        document.execCommand("copy");
+      }
+      document.getElementById("copy").textContent = "已複製";
+      setTimeout(function () { document.getElementById("copy").textContent = "複製"; }, 1400);
+    });
+    soundBtn.addEventListener("click", function () {
+      soundOn = !soundOn;
+      if (soundOn) { unlockAudio(); playArm(); }
+      save();
+      render();
+    });
+    document.getElementById("simulate").addEventListener("click", function () {
+      if (phase !== "live") { setError("先開放搶答"); return; }
+      acceptBuzz({ id: "sim-" + Date.now(), name: "模擬" + (buzzes.length + 1) });
+    });
+    document.getElementById("skip").addEventListener("click", function () { nextRound(false); });
+    document.getElementById("clear").addEventListener("click", function () {
+      if (!confirmClear) { confirmClear = true; render(); return; }
+      confirmClear = false;
+      scores = {};
+      historyList = [];
+      save();
+      render();
+    });
+    document.getElementById("new-room").addEventListener("click", function () {
+      if (!confirmRoom) { confirmRoom = true; render(); return; }
+      confirmRoom = false;
+      join(makeRoom(), true);
+    });
+    window.addEventListener("keydown", function (event) {
+      const tag = event.target && event.target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON") return;
+      if (event.code === "Space") { event.preventDefault(); openRound(); }
+      if (event.key === "Enter" && winner()) { event.preventDefault(); nextRound(true); }
+    });
+    document.addEventListener("pointerdown", unlockAudio, { once: true });
+
+    soundOn = localStorage.getItem("buzzer-host-sound") !== "off";
+    const params = new URLSearchParams(location.search);
+    room = normalizeRoom(params.get("room")) || normalizeRoom(localStorage.getItem("buzzer-host-last")) || makeRoom();
+    if (!window.Ably) {
+      setError("連線元件載入失敗，請檢查網絡再重新整理。");
+    } else {
+      ably = new Ably.Realtime(KEY);
+      ably.connection.on(function (change) {
+        render();
+        if (change.current === "connected" && change.previous !== "connected") publishControl();
+      });
+      join(room, false);
+    }
+  </script>
+</body>
+</html>

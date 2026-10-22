@@ -1,68 +1,390 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>小天才搶答器</title>
-    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
-    <style>
-        body { font-family: "Microsoft JhengHei", sans-serif; text-align: center; background: #eef2f3; margin: 0; padding: 20px; }
-        .container { max-width: 400px; margin: auto; }
-        #buzzer { 
-            width: 200px; height: 200px; border-radius: 50%; 
-            background: radial-gradient(#ff4757, #ff6b81); color: white; 
-            font-size: 28px; font-weight: bold; border: 8px solid #fff;
-            cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-            transition: 0.1s; margin-top: 30px;
-        }
-        #buzzer:active { transform: scale(0.95); box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        #buzzer:disabled { background: #bdc3c7; border-color: #ecf0f1; box-shadow: none; }
-        #status { margin-top: 30px; font-size: 22px; color: #2c3e50; min-height: 1.5em; }
-        input { padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; width: 80%; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="搶答">
+  <title>小天才搶答器</title>
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #e7eef0;
+      --card: #fff;
+      --ink: #1c2833;
+      --muted: #5c6b73;
+      --line: #d5dee2;
+      --red: #e23d4a;
+      --red-deep: #c42e3a;
+      --green: #1f7a45;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    .wrap { max-width: 420px; margin: 0 auto; padding: 24px 20px 40px; }
+    h1 { font-size: 28px; margin: 0; letter-spacing: 0.04em; }
+    .lede { color: var(--muted); margin: 8px 0 0; line-height: 1.5; }
+    label { display: block; margin: 18px 0 8px; font-size: 14px; color: var(--muted); }
+    input {
+      width: 100%;
+      min-height: 52px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 0 16px;
+      font-size: 20px;
+      background: var(--card);
+    }
+    #room { letter-spacing: 0.28em; text-transform: uppercase; font-weight: 700; }
+    button { font: inherit; cursor: pointer; }
+    .go, .switch {
+      width: 100%;
+      min-height: 54px;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--red);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .switch { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+    .go:disabled { opacity: 0.45; }
+    .card {
+      margin-top: 22px;
+      background: var(--card);
+      border-radius: 24px;
+      padding: 22px 18px 28px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(28, 40, 51, 0.06);
+    }
+    .meta { color: var(--muted); font-size: 14px; letter-spacing: 0.12em; }
+    .question {
+      min-height: 1.4em;
+      margin: 14px 0 0;
+      font-size: 22px;
+      line-height: 1.4;
+      font-weight: 700;
+    }
+    #buzzer {
+      width: min(62vw, 220px);
+      height: min(62vw, 220px);
+      margin: 26px auto 0;
+      border-radius: 50%;
+      border: 8px solid #fff;
+      background: radial-gradient(circle at 40% 35%, #ff7380, var(--red) 52%, var(--red-deep));
+      color: #fff;
+      font-size: 26px;
+      font-weight: 800;
+      box-shadow: 0 10px 24px rgba(226, 61, 74, 0.28);
+    }
+    #buzzer:active:not(:disabled) { transform: scale(0.97); }
+    #buzzer:disabled { background: #c5ced3; box-shadow: none; }
+    #status { margin-top: 22px; font-size: 20px; line-height: 1.45; min-height: 1.45em; }
+    #status.win { color: var(--green); font-weight: 800; }
+    #status.bad { color: var(--red); font-weight: 700; }
+    .err { color: var(--red); min-height: 1.2em; }
+    [hidden] { display: none !important; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h2>🏆 搶答大挑戰</h2>
-        <input type="text" id="username" placeholder="請輸入名字...">
-        <br>
-        <button id="buzzer" onclick="pressButton()">按我搶答！</button>
-        <div id="status">準備好就緒</div>
-        
-        <hr style="margin-top: 50px; border: 0; border-top: 1px solid #ccc;">
-    </div>
+  <main class="wrap">
+    <section id="join">
+      <h1>小天才搶答器</h1>
+      <p class="lede">輸入主持 iPad 上嘅 4 位房號，同你嘅名。</p>
+      <label for="room">房號</label>
+      <input id="room" inputmode="latin" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="4" placeholder="例如 K7MP">
+      <label for="name">名字</label>
+      <input id="name" maxlength="12" autocomplete="nickname" placeholder="你的名字">
+      <button class="go" id="enter" type="button">進入</button>
+      <p class="err" id="join-error"></p>
+    </section>
 
-    <script>
-        const ably = new Ably.Realtime('Nta7rA.R_3OIg:p4OAZ8Z8_mgfKaLTDl1rPWiKn7aMb12txQ2H2s8EuLo');
-        const channel = ably.channels.get('quiz-room');
-        let hasWinner = false;
+    <section id="pad" hidden>
+      <p class="meta">房號 <span id="show-room"></span></p>
+      <p class="question" id="question">聽主持人出題</p>
+      <div class="card">
+        <button id="buzzer" type="button">連線中</button>
+        <p id="status">連緊主持…</p>
+      </div>
+      <button class="switch" id="switch" type="button">換房或改名</button>
+    </section>
+  </main>
+  <script>
+    const KEY = "Nta7rA.R_3OIg:p4OAZ8Z8_mgfKaLTDl1rPWiKn7aMb12txQ2H2s8EuLo";
+    const joinEl = document.getElementById("join");
+    const padEl = document.getElementById("pad");
+    const roomInput = document.getElementById("room");
+    const nameInput = document.getElementById("name");
+    const joinError = document.getElementById("join-error");
+    const buzzer = document.getElementById("buzzer");
+    const statusEl = document.getElementById("status");
+    const questionEl = document.getElementById("question");
+    const showRoom = document.getElementById("show-room");
 
-        channel.subscribe('buzz', (msg) => {
-            if (!hasWinner) {
-                hasWinner = true;
-                document.getElementById('buzzer').disabled = true;
-                document.getElementById('status').innerHTML = "🎊 <b style='color:#27ae60'>" + msg.data.name + "</b> 搶到了！";
-            }
-        });
+    const myId = (function () {
+      const saved = localStorage.getItem("buzzer-id");
+      if (saved) return saved;
+      const id = Math.random().toString(16).slice(2) + Date.now().toString(16);
+      localStorage.setItem("buzzer-id", id);
+      return id;
+    })();
 
-        channel.subscribe('reset', () => {
-            hasWinner = false;
-            document.getElementById('buzzer').disabled = false;
-            document.getElementById('status').innerText = "開始搶答！";
-        });
+    let ably = null;
+    let channel = null;
+    let room = "";
+    let name = "";
+    let connected = false;
+    let ready = false;
+    let phase = "hold";
+    let localRound = 0;
+    let lastSeq = 0;
+    let buzzed = false;
+    let fouled = false;
+    let winnerId = null;
+    let winnerName = "";
+    let passedMe = false;
+    let celebrated = false;
+    let audioCtx = null;
 
-        function pressButton() {
-            const name = document.getElementById('username').value || "神秘玩家";
-            if (!hasWinner) {
-                // Android 手機按下時會震動一下
-                if (navigator.vibrate) navigator.vibrate(100); 
-                channel.publish('buzz', { name: name });
-            }
+    function cleanName(raw) {
+      const next = String(raw || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 12);
+      return next || "神秘玩家";
+    }
+    function normalizeRoom(raw) {
+      const code = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+      return /^[A-Z0-9]{4}$/.test(code) ? code : "";
+    }
+    function flagKey(kind) {
+      return "buzzer-" + kind + ":" + room + ":" + localRound;
+    }
+    function unlockAudio() {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audioCtx = audioCtx || new Ctx();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    }
+    function beep() {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.22);
+    }
+
+    function render() {
+      showRoom.textContent = room;
+      questionEl.textContent = questionEl.dataset.q || "聽主持人出題";
+      statusEl.className = "";
+      if (!connected) {
+        buzzer.disabled = true;
+        buzzer.textContent = "連線中";
+        statusEl.textContent = "連緊主持…";
+        return;
+      }
+      if (!ready) {
+        buzzer.disabled = true;
+        buzzer.textContent = "等主持";
+        statusEl.textContent = "等主持人開啟呢間房";
+        return;
+      }
+      if (fouled) {
+        buzzer.disabled = true;
+        buzzer.textContent = "不能再搶";
+        statusEl.textContent = "太早按，這一題不能再搶";
+        statusEl.className = "bad";
+        return;
+      }
+      if (buzzed && passedMe) {
+        buzzer.disabled = true;
+        buzzer.textContent = "已換人";
+        statusEl.textContent = "主持人換下一位了";
+        return;
+      }
+      if (buzzed && winnerId === myId) {
+        buzzer.disabled = true;
+        buzzer.textContent = "你搶到了";
+        statusEl.textContent = "等主持人問你";
+        statusEl.className = "win";
+        return;
+      }
+      if (buzzed) {
+        buzzer.disabled = true;
+        buzzer.textContent = "已排隊";
+        statusEl.textContent = winnerName && winnerId !== myId ? winnerName + " 搶到了，你已排隊" : "已送到主持，等叫號";
+        return;
+      }
+      buzzer.disabled = false;
+      if (phase !== "live") {
+        buzzer.textContent = "等開放";
+        statusEl.textContent = "主持人未開放。而家按會算犯規";
+        return;
+      }
+      if (winnerName && winnerId !== myId) {
+        buzzer.textContent = "排隊";
+        statusEl.textContent = winnerName + " 搶到了，你仍可排隊";
+        return;
+      }
+      buzzer.textContent = "按我搶答";
+      statusEl.textContent = "搶答開始";
+    }
+
+    function rememberFlags() {
+      if (!room || !localRound) return;
+      if (buzzed) sessionStorage.setItem(flagKey("buzz"), "1");
+      else sessionStorage.removeItem(flagKey("buzz"));
+      if (fouled) sessionStorage.setItem(flagKey("foul"), "1");
+      else sessionStorage.removeItem(flagKey("foul"));
+    }
+
+    function applyControl(data) {
+      if (!data || data.room !== room) return;
+      if (typeof data.seq === "number" && data.seq <= lastSeq) return;
+      if (typeof data.seq === "number") lastSeq = data.seq;
+      ready = true;
+      const nextRound = Number(data.round) || 1;
+      if (nextRound !== localRound) {
+        localRound = nextRound;
+        buzzed = false;
+        fouled = false;
+        passedMe = false;
+        celebrated = false;
+      }
+      buzzed = sessionStorage.getItem(flagKey("buzz")) === "1";
+      fouled = sessionStorage.getItem(flagKey("foul")) === "1";
+      const forgiven = Array.isArray(data.forgiven) ? data.forgiven : [];
+      if (forgiven.indexOf(myId) !== -1) {
+        fouled = false;
+        sessionStorage.removeItem(flagKey("foul"));
+      }
+      phase = data.phase === "live" ? "live" : "hold";
+      questionEl.dataset.q = String(data.question || "").slice(0, 200);
+      const prevWinner = winnerId;
+      winnerId = data.winnerId || null;
+      winnerName = data.winnerName || "";
+      passedMe = Array.isArray(data.passed) && data.passed.indexOf(myId) !== -1;
+      if (winnerId === myId && prevWinner !== myId) {
+        if (!celebrated) {
+          celebrated = true;
+          if (navigator.vibrate) navigator.vibrate(180);
+          beep();
         }
+      }
+      render();
+    }
 
-        function resetGame() {
-            channel.publish('reset', {});
-        }
-    </script>
+    function attach(nextRoom) {
+      if (channel) {
+        channel.unsubscribe();
+        channel.presence.leave().catch(function () {});
+      }
+      room = nextRoom;
+      ready = false;
+      phase = "hold";
+      localRound = 0;
+      lastSeq = 0;
+      buzzed = false;
+      fouled = false;
+      winnerId = null;
+      winnerName = "";
+      passedMe = false;
+      celebrated = false;
+      questionEl.dataset.q = "";
+      channel = ably.channels.get("quiz-" + room);
+      channel.subscribe("control", function (msg) { applyControl(msg.data || {}); });
+      channel.presence.enter({ name: name, id: myId, role: "player" }).catch(function () {});
+      render();
+    }
+
+    function start(nextRoom, nextName) {
+      room = nextRoom;
+      name = nextName;
+      localStorage.setItem("buzzer-name", name);
+      localStorage.setItem("buzzer-room", room);
+      joinEl.hidden = true;
+      padEl.hidden = false;
+      if (!ably) {
+        ably = new Ably.Realtime(KEY);
+        ably.connection.on(function (change) {
+          connected = change.current === "connected";
+          if (!connected) ready = ready && change.current !== "failed";
+          render();
+        });
+      }
+      attach(room);
+    }
+
+    function press() {
+      if (!connected || !ready || buzzed || fouled) return;
+      unlockAudio();
+      if (phase !== "live") {
+        fouled = true;
+        rememberFlags();
+        if (navigator.vibrate) navigator.vibrate(60);
+        channel.publish("foul", { id: myId, name: name });
+        render();
+        return;
+      }
+      buzzed = true;
+      rememberFlags();
+      if (navigator.vibrate) navigator.vibrate(100);
+      channel.publish("buzz", { id: myId, name: name }, function (err) {
+        if (!err) return;
+        buzzed = false;
+        rememberFlags();
+        statusEl.textContent = "送唔出，再按一次";
+        render();
+      });
+      render();
+    }
+
+    document.getElementById("enter").addEventListener("click", function () {
+      unlockAudio();
+      const nextRoom = normalizeRoom(roomInput.value);
+      const nextName = cleanName(nameInput.value);
+      if (!nextRoom) {
+        joinError.textContent = "房號要 4 個英文字或數字";
+        return;
+      }
+      joinError.textContent = "";
+      nameInput.value = nextName;
+      start(nextRoom, nextName);
+    });
+    buzzer.addEventListener("click", press);
+    document.getElementById("switch").addEventListener("click", function () {
+      if (channel) {
+        channel.presence.leave().catch(function () {});
+        channel.unsubscribe();
+        channel = null;
+      }
+      padEl.hidden = true;
+      joinEl.hidden = false;
+      const url = new URL(location.href);
+      url.search = "";
+      history.replaceState(null, "", url.pathname);
+    });
+
+    const queryRoom = normalizeRoom(new URLSearchParams(location.search).get("room"));
+    const savedName = localStorage.getItem("buzzer-name") || "";
+    const savedRoom = normalizeRoom(localStorage.getItem("buzzer-room"));
+    if (queryRoom) roomInput.value = queryRoom;
+    else if (savedRoom) roomInput.value = savedRoom;
+    if (savedName) nameInput.value = savedName;
+    if (queryRoom && savedName && window.Ably) start(queryRoom, cleanName(savedName));
+  </script>
 </body>
 </html>
