@@ -65,7 +65,19 @@
       text-align: center;
       box-shadow: 0 10px 30px rgba(28, 40, 51, 0.06);
     }
-    .meta { color: var(--muted); font-size: 14px; letter-spacing: 0.12em; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 14px; }
+    .pill { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 999px; background: #fff; border: 1px solid var(--line); }
+    .pill.ok { color: var(--green); border-color: #b7e0c8; background: #eef8f2; }
+    .pill.bad { color: var(--red); border-color: #f3c2c7; background: #fdecee; }
+    .board { margin-top: 18px; }
+    .board h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
+    .score-row { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-top: 1px solid var(--line); }
+    .score-row.me { background: #fff4f5; border-radius: 12px; padding-left: 8px; }
+    .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pts { font-variant-numeric: tabular-nums; font-weight: 800; }
+    .mini { width: 8px; height: 8px; border-radius: 50%; background: var(--line); display: inline-block; margin-right: 8px; }
+    .mini.on { background: var(--green); }
+    .sub { color: var(--muted); font-size: 14px; }
     .question {
       min-height: 1.4em;
       margin: 14px 0 0;
@@ -108,12 +120,20 @@
     </section>
 
     <section id="pad" hidden>
-      <p class="meta">房號 <span id="show-room"></span></p>
+      <div class="meta">
+        <span class="pill bad" id="conn">未連線</span>
+        <span class="pill" id="round-label">第 — 題</span>
+        <span>房號 <span id="show-room"></span></span>
+      </div>
       <p class="question" id="question">聽主持人出題</p>
       <div class="card">
         <button id="buzzer" type="button">連線中</button>
         <p id="status">連緊主持…</p>
       </div>
+      <section class="board">
+        <h2>參加者同分數</h2>
+        <div id="board"></div>
+      </section>
       <button class="switch" id="switch" type="button">換房或改名</button>
     </section>
   </main>
@@ -128,6 +148,9 @@
     const statusEl = document.getElementById("status");
     const questionEl = document.getElementById("question");
     const showRoom = document.getElementById("show-room");
+    const connEl = document.getElementById("conn");
+    const roundEl = document.getElementById("round-label");
+    const boardEl = document.getElementById("board");
 
     const myId = (function () {
       const saved = localStorage.getItem("buzzer-id");
@@ -153,6 +176,9 @@
     let passedMe = false;
     let celebrated = false;
     let audioCtx = null;
+    let board = [];
+    let onlineIds = [];
+    let beatTimer = 0;
 
     function cleanName(raw) {
       const next = String(raw || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 12);
@@ -186,7 +212,40 @@
       osc.stop(now + 0.22);
     }
 
+    function renderBoard() {
+      boardEl.replaceChildren();
+      if (!board.length) {
+        const empty = document.createElement("p");
+        empty.className = "sub";
+        empty.textContent = "未有參加者";
+        boardEl.appendChild(empty);
+        return;
+      }
+      board.forEach(function (row, index) {
+        const line = document.createElement("div");
+        line.className = "score-row" + (row.id === myId ? " me" : "");
+        const who = document.createElement("span");
+        who.className = "who";
+        const dot = document.createElement("span");
+        dot.className = "mini" + (onlineIds.indexOf(row.id) !== -1 ? " on" : "");
+        who.appendChild(dot);
+        who.appendChild(document.createTextNode((index + 1) + "  " + (row.name || "選手")));
+        const pts = document.createElement("span");
+        pts.className = "pts";
+        pts.textContent = String(Number(row.score) || 0);
+        line.appendChild(who);
+        line.appendChild(pts);
+        boardEl.appendChild(line);
+      });
+    }
+    function renderConn() {
+      connEl.textContent = connected ? "已連線" : "未連線";
+      connEl.className = "pill " + (connected ? "ok" : "bad");
+      roundEl.textContent = localRound ? "第 " + localRound + " 題" : "第 — 題";
+    }
     function render() {
+      renderConn();
+      renderBoard();
       showRoom.textContent = room;
       questionEl.textContent = questionEl.dataset.q || "聽主持人出題";
       statusEl.className = "";
@@ -277,6 +336,8 @@
       winnerId = data.winnerId || null;
       winnerName = data.winnerName || "";
       passedMe = Array.isArray(data.passed) && data.passed.indexOf(myId) !== -1;
+      board = Array.isArray(data.board) ? data.board.slice(0, 40) : [];
+      onlineIds = Array.isArray(data.online) ? data.online : [];
       if (winnerId === myId && prevWinner !== myId) {
         if (!celebrated) {
           celebrated = true;
@@ -288,9 +349,10 @@
     }
 
     function attach(nextRoom) {
+      window.clearInterval(beatTimer);
       if (channel) {
-        channel.unsubscribe();
-        channel.presence.leave().catch(function () {});
+        try { channel.unsubscribe(); } catch (err) {}
+        channel = null;
       }
       room = nextRoom;
       ready = false;
@@ -303,10 +365,18 @@
       winnerName = "";
       passedMe = false;
       celebrated = false;
+      board = [];
+      onlineIds = [];
       questionEl.dataset.q = "";
+      window.clearInterval(beatTimer);
       channel = ably.channels.get("quiz-" + room);
       channel.subscribe("control", function (msg) { applyControl(msg.data || {}); });
-      channel.presence.enter({ name: name, id: myId, role: "player" }).catch(function () {});
+      const beat = function () {
+        if (!channel || !connected) return;
+        channel.publish("here", { id: myId, name: name });
+      };
+      beat();
+      beatTimer = window.setInterval(beat, 4000);
       render();
     }
 
@@ -321,6 +391,7 @@
         ably = new Ably.Realtime(KEY);
         ably.connection.on(function (change) {
           connected = change.current === "connected";
+          if (connected && channel) channel.publish("here", { id: myId, name: name });
           if (!connected) ready = ready && change.current !== "failed";
           render();
         });
@@ -367,8 +438,8 @@
     buzzer.addEventListener("click", press);
     document.getElementById("switch").addEventListener("click", function () {
       if (channel) {
-        channel.presence.leave().catch(function () {});
-        channel.unsubscribe();
+        window.clearInterval(beatTimer);
+        try { channel.unsubscribe(); } catch (err) {}
         channel = null;
       }
       padEl.hidden = true;

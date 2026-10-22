@@ -135,7 +135,9 @@
     .pill.live { background: var(--red); color: #fff; }
     .pill.got { background: var(--ink); color: #fff; }
     .names { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .chip { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; }
+    .live-card { margin-top: 16px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
+    .mini { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
     @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -164,6 +166,11 @@
       </div>
     </div>
 
+    <section class="card live-card">
+      <h2 class="label">已連線 <span id="online-count">0</span></h2>
+      <div class="names" id="online"></div>
+    </section>
+
     <div class="layout">
       <section>
         <label class="label" for="question">題目，選手手機會見到</label>
@@ -185,9 +192,7 @@
           <div id="scores"></div>
         </section>
         <section class="card">
-          <h2 class="label">在線 <span id="online-count">0</span></h2>
-          <div class="names" id="online"></div>
-          <h2 class="label" style="margin-top:16px">這一題的順序</h2>
+          <h2 class="label">這一題的順序</h2>
           <div class="scroll" id="timeline"></div>
         </section>
         <section class="card">
@@ -201,7 +206,7 @@
       <button class="text-btn" id="simulate" type="button">模擬選手按下</button>
       <button class="text-btn" id="skip" type="button">直接下一題</button>
       <button class="text-btn danger" id="clear" type="button">清空分數</button>
-      <button class="text-btn danger" id="new-room" type="button">開新房號</button>
+      <button class="text-btn danger" id="new-room" type="button">開新房</button>
     </footer>
   </main>
   <script>
@@ -236,9 +241,10 @@
     let passed = {};
     let forgiven = {};
     let online = [];
+    let seen = {};
+    let rosterTimer = 0;
     let lastHitSound = "";
     let confirmClear = false;
-    let confirmRoom = false;
     let audioCtx = null;
     let qTimer = 0;
 
@@ -357,11 +363,29 @@
       if (!scores[id]) scores[id] = { name: playerName, score: 0 };
       else scores[id].name = playerName;
     }
+    function roster() {
+      const map = {};
+      Object.keys(scores).forEach(function (id) {
+        map[id] = {
+          id: id,
+          name: cleanName(scores[id].name),
+          score: Number(scores[id].score) || 0
+        };
+      });
+      online.forEach(function (person) {
+        if (!map[person.id]) map[person.id] = { id: person.id, name: person.name, score: 0 };
+        else map[person.id].name = person.name;
+      });
+      return Object.keys(map).map(function (id) { return map[id]; }).sort(function (a, b) {
+        return b.score - a.score || a.name.localeCompare(b.name, "zh-Hant");
+      }).slice(0, 40);
+    }
     function publishControl() {
       save();
       if (!channel || !ably || ably.connection.state !== "connected") return;
       seq += 1;
       const current = winner();
+      const people = roster();
       channel.publish("control", {
         seq: seq,
         room: room,
@@ -371,9 +395,35 @@
         winnerId: current ? current.id : null,
         winnerName: current ? current.name : null,
         forgiven: Object.keys(forgiven),
-        passed: Object.keys(passed)
+        passed: Object.keys(passed),
+        board: people,
+        online: online.map(function (person) { return person.id; })
       });
       save();
+    }
+    function scheduleRoster() {
+      window.clearTimeout(rosterTimer);
+      rosterTimer = window.setTimeout(publishControl, 300);
+    }
+    function rebuildOnline() {
+      const now = Date.now();
+      Object.keys(seen).forEach(function (id) {
+        if (now - seen[id].at > 20000) delete seen[id];
+      });
+      online = Object.keys(seen).map(function (id) {
+        return { id: id, name: seen[id].name };
+      }).sort(function (a, b) { return a.name.localeCompare(b.name, "zh-Hant"); });
+    }
+    function noteHere(data) {
+      const id = String((data && data.id) || "").slice(0, 48);
+      if (!id) return;
+      const playerName = cleanName(data.name);
+      const prev = seen[id];
+      const wasOnline = !!(prev && Date.now() - prev.at < 12000);
+      seen[id] = { name: playerName, at: Date.now() };
+      rebuildOnline();
+      renderOnline();
+      if (!wasOnline || !prev || prev.name !== playerName) scheduleRoster();
     }
     function noteWinnerSound() {
       const current = winner();
@@ -419,7 +469,6 @@
       passed = {};
       lastHitSound = "";
       confirmClear = false;
-      confirmRoom = false;
       if (channel) channel.publish("reset", {});
       publishControl();
       playArm();
@@ -563,8 +612,12 @@
     }
     function renderOnline() {
       onlineCountEl.textContent = String(online.length);
-      onlineEl.innerHTML = online.slice(0, 24).map(function (person) {
-        return '<span class="chip">' + esc(person.name) + '</span>';
+      if (!online.length) {
+        onlineEl.innerHTML = '<p class="sub">未有人連線。選手打開連結之後，呢度會即時出現名字。</p>';
+        return;
+      }
+      onlineEl.innerHTML = online.map(function (person) {
+        return '<span class="chip"><span class="mini"></span>' + esc(person.name) + '</span>';
       }).join("");
     }
     function render() {
@@ -579,7 +632,6 @@
       else connEl.textContent = connectionLabel() + " · 準備中";
       soundBtn.textContent = soundOn ? "音效開" : "音效關";
       document.getElementById("clear").textContent = confirmClear ? "確定清空分數" : "清空分數";
-      document.getElementById("new-room").textContent = confirmRoom ? "確定開新房" : "開新房號";
       renderStage();
       renderScores();
       renderTimeline();
@@ -595,24 +647,23 @@
       if (state === "failed") return "連唔上";
       return "連線中";
     }
-    function refreshOnline() {
-      if (!channel) return;
-      channel.presence.get(function (err, members) {
-        if (err || !members) return;
-        online = members.map(function (member) { return member.data || {}; }).filter(function (data) {
-          return data.role !== "host" && data.name;
-        }).map(function (data) {
-          return { id: data.id || data.name, name: cleanName(data.name) };
-        });
-        renderOnline();
-      });
+    function detachChannel() {
+      const current = channel;
+      channel = null;
+      if (!current) return;
+      try { current.unsubscribe(); } catch (err) {}
+      try {
+        if (current.presence && current.presence.leave) {
+          const pending = current.presence.leave();
+          if (pending && typeof pending.catch === "function") pending.catch(function () {});
+        }
+      } catch (err) {}
     }
     function join(nextRoom, isFresh) {
-      if (channel) {
-        channel.unsubscribe();
-        channel.presence.leave().catch(function () {});
-      }
+      detachChannel();
       room = nextRoom;
+      seen = {};
+      online = [];
       const url = new URL(location.href);
       url.search = "?room=" + room;
       history.replaceState(null, "", url.pathname + url.search);
@@ -620,10 +671,10 @@
       channel = ably.channels.get("quiz-" + room);
       channel.subscribe("buzz", function (msg) { acceptBuzz(msg.data || {}); });
       channel.subscribe("foul", function (msg) { acceptFoul(msg.data || {}); });
-      channel.presence.subscribe(refreshOnline);
-      channel.presence.enter({ name: "主持", id: "host", role: "host" }).then(refreshOnline).catch(function () {});
+      channel.subscribe("here", function (msg) { noteHere(msg.data || {}); });
       publishControl();
       render();
+      if (isFresh) setError("已開新房 " + room + "。請複製新連結俾選手。");
     }
 
     stage.addEventListener("click", function (event) {
@@ -688,9 +739,9 @@
       render();
     });
     document.getElementById("new-room").addEventListener("click", function () {
-      if (!confirmRoom) { confirmRoom = true; render(); return; }
-      confirmRoom = false;
-      join(makeRoom(), true);
+      let next = makeRoom();
+      if (next === room) next = makeRoom();
+      join(next, true);
     });
     window.addEventListener("keydown", function (event) {
       const tag = event.target && event.target.tagName;
@@ -712,6 +763,13 @@
         if (change.current === "connected" && change.previous !== "connected") publishControl();
       });
       join(room, false);
+      window.setInterval(function () {
+        const before = online.map(function (person) { return person.id; }).join(",");
+        rebuildOnline();
+        const after = online.map(function (person) { return person.id; }).join(",");
+        renderOnline();
+        if (before !== after) scheduleRoster();
+      }, 3000);
     }
   </script>
 </body>
