@@ -1,1 +1,14 @@
-PLACEHOLDER
+<!DOCTYPE html>
+<html lang="zh-Hant"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主持 · 小天才搶答器</title>
+</head><body>
+<p>載入主持頁…</p>
+<script>
+fetch("https://raw.githubusercontent.com/csfclayton/buzzer-user/2ec85c2f0a2498e65130e138c91df57cce53e50f/host.html")
+  .then(r => r.text())
+  .then(html => { document.open(); document.write(html); document.close(); })
+  .catch(e => { document.body.textContent = "載入失敗，請重新整理。"; });
+</script>
+</body></html>
