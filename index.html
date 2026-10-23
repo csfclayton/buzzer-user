@@ -1,17 +1,98 @@
 <!DOCTYPE html>
-<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>小天才搶答器</title></head>
-<body><p>載入中…</p>
+<html lang="zh-Hant"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><title>小天才搶答器</title>
+<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+<style>
+:root{--bg:#e7eef0;--card:#fff;--ink:#1c2833;--muted:#5c6b73;--line:#d5dee2;--red:#e23d4a;--red-deep:#c42e3a;--green:#1f7a45}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;font-family:"PingFang TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--ink);padding:20px}
+.wrap{max-width:420px;margin:0 auto}h1{font-size:26px;margin:0}label{display:block;margin:14px 0 6px;font-size:14px;color:var(--muted)}
+input{width:100%;min-height:48px;border:1px solid var(--line);border-radius:12px;padding:0 12px;font-size:18px}
+button{font:inherit;cursor:pointer}.go{width:100%;min-height:50px;margin-top:14px;border:0;border-radius:999px;background:var(--red);color:#fff;font-weight:700}
+.card{background:var(--card);border-radius:20px;padding:18px;margin-top:14px;text-align:center;box-shadow:0 8px 24px rgba(28,40,51,.06)}
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--line);background:#fff}
+.pill.ok{color:var(--green);border-color:#b7e0c8;background:#eef8f2}.pill.bad{color:var(--red);border-color:#f3c2c7;background:#fdecee}
+#buzzer{width:min(62vw,200px);height:min(62vw,200px);margin:18px auto 0;border-radius:50%;border:8px solid #fff;color:#fff;font-size:22px;font-weight:800}
+#buzzer.armed{background:radial-gradient(circle at 40% 35%,#ff7380,var(--red) 52%,var(--red-deep));box-shadow:0 10px 24px rgba(226,61,74,.28)}
+#buzzer.live{background:radial-gradient(circle at 40% 35%,#5dcf8a,var(--green) 52%,#0f5c30);box-shadow:0 10px 24px rgba(31,122,69,.32)}
+#buzzer.done{background:#c5ced3;box-shadow:none}
+#status{margin-top:16px;font-size:18px;min-height:1.4em}.win{color:var(--green);font-weight:800}.bad{color:var(--red);font-weight:700}
+.order,.board{margin-top:14px;text-align:left}.order h2,.board h2{margin:0 0 6px;font-size:13px;letter-spacing:.12em;color:var(--muted)}
+.order-row,.score-row{display:flex;justify-content:space-between;gap:8px;padding:8px 4px;border-top:1px solid var(--line)}
+.order-row.me,.score-row.me{background:#fff4f5;border-radius:10px;padding-left:8px}
+.delta{font-variant-numeric:tabular-nums;color:var(--muted);min-width:4.5em;text-align:right}.delta.first{color:var(--green);font-weight:700}
+.pts{font-weight:800}.hint{color:var(--muted);font-size:14px}.switch{width:100%;min-height:44px;margin-top:14px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted)}
+[hidden]{display:none!important}
+</style></head><body><main class="wrap">
+<section id="join"><h1>小天才搶答器</h1><p class="hint">請用 iPad 上輸入 4 位房號，同你的名字。</p>
+<label for="room">房號</label><input id="room" maxlength="4" placeholder="例如 K7MP" autocapitalize="characters">
+<label for="name">名字</label><input id="name" maxlength="12" placeholder="你的名字">
+<button class="go" id="enter" type="button">進入</button><p id="join-error" style="color:var(--red)"></p></section>
+<section id="pad" hidden>
+<div class="meta"><span class="pill bad" id="conn">未連線</span><span class="pill" id="round-label">第 — 題</span><span>房號 <span id="show-room"></span></span></div>
+<p id="question" style="font-size:20px;font-weight:700;margin:12px 0 0">等待主持出題</p>
+<div class="card"><button id="buzzer" class="armed" type="button">搶答中</button><p id="status">搶答未開始…</p></div>
+<section class="order"><h2>這一題時間差</h2><div id="order"></div></section>
+<section class="board"><h2>分數排行榜</h2><div id="board"></div></section>
+<button class="switch" id="switch" type="button">轉換身份</button>
+</section>
 <script>
-(async function(){
-  try {
-    var n=9, s="";
-    for (var i=0;i<n;i++) {
-      var r=await fetch("ib"+i+".txt?v=7");
-      if(!r.ok) throw new Error("ib"+i);
-      s+=await r.text();
-    }
-    var html=decodeURIComponent(escape(atob(s.replace(/\s/g,""))));
-    document.open();document.write(html);document.close();
-  } catch(e) { document.body.textContent="載入失敗："+e; }
-})();
+const KEY="Nta7rA.R_3OIg:p4OAZ8Z8_mgfKaLTDl1rPWiKn7aMb12txQ2H2s8EuLo";
+const myId=(function(){var s=localStorage.getItem("buzzer-id");if(s)return s;s=Math.random().toString(16).slice(2)+Date.now().toString(16);localStorage.setItem("buzzer-id",s);return s})();
+var ably=null,channel=null,room="",name="",connected=false,ready=false,phase="hold",localRound=0,lastSeq=0;
+var buzzed=false,fouled=false,winnerId=null,winnerName="",passedMe=false,board=[],onlineIds=[],orderList=[],beatTimer=0;
+var joinEl=document.getElementById("join"),padEl=document.getElementById("pad"),buzzer=document.getElementById("buzzer");
+var statusEl=document.getElementById("status"),questionEl=document.getElementById("question"),connEl=document.getElementById("conn");
+var roundEl=document.getElementById("round-label"),orderEl=document.getElementById("order"),boardEl=document.getElementById("board"),showRoom=document.getElementById("show-room");
+function cleanName(r){var n=String(r||"").replace(/[\u0000-\u001f]/g,"").trim().slice(0,12);return n||"神秘玩家"}
+function normalizeRoom(r){var c=String(r||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);return /^[A-Z0-9]{4}$/.test(c)?c:""}
+function setBuzzerClass(m){buzzer.classList.remove("armed","live","done");buzzer.classList.add(m)}
+function fmtDelta(ms){return "+"+(Math.max(0,Number(ms)||0)/1000).toFixed(2)+"秒"}
+function renderOrder(){orderEl.replaceChildren();if(!orderList.length){var p=document.createElement("p");p.className="hint";p.textContent=phase==="live"?"等待有人按…":"未有人按";orderEl.appendChild(p);return}
+orderList.forEach(function(row){var line=document.createElement("div");line.className="order-row"+(row.id===myId?" me":"");
+var who=document.createElement("span");who.textContent=row.place+"  "+(row.name||"玩家");
+var d=document.createElement("span");d.className="delta"+(row.place===1?" first":"");d.textContent=row.place===1?"第一":fmtDelta(row.deltaMs);
+line.appendChild(who);line.appendChild(d);orderEl.appendChild(line)})}
+function renderBoard(){boardEl.replaceChildren();if(!board.length){var p=document.createElement("p");p.className="hint";p.textContent="未有分數";boardEl.appendChild(p);return}
+board.forEach(function(row,i){var line=document.createElement("div");line.className="score-row"+(row.id===myId?" me":"");
+var who=document.createElement("span");who.textContent=(i+1)+"  "+(row.name||"玩家");
+var pts=document.createElement("span");pts.className="pts";pts.textContent=String(Number(row.score)||0);
+line.appendChild(who);line.appendChild(pts);boardEl.appendChild(line)})}
+function render(){connEl.textContent=connected?"已連線":"未連線";connEl.className="pill "+(connected?"ok":"bad");
+roundEl.textContent=localRound?"第 "+localRound+" 題":"第 — 題";showRoom.textContent=room;renderOrder();renderBoard();
+questionEl.textContent=questionEl.dataset.q||"等待主持出題";statusEl.className="";
+if(!connected){buzzer.disabled=true;setBuzzerClass("done");buzzer.textContent="搶答中";statusEl.textContent="搶答未開始…";return}
+if(!ready){buzzer.disabled=true;setBuzzerClass("done");buzzer.textContent="等待主持";statusEl.textContent="等待主持開局或重新入房";return}
+if(fouled){buzzer.disabled=true;setBuzzerClass("done");buzzer.textContent="搶答犯規";statusEl.textContent="太早按，等下一題再試";statusEl.className="bad";return}
+if(buzzed&&passedMe){buzzer.disabled=true;setBuzzerClass("done");buzzer.textContent="已過你";statusEl.textContent="主持已跳過你";return}
+if(buzzed&&winnerId===myId){buzzer.disabled=true;setBuzzerClass("done");buzzer.textContent="你搶到了";statusEl.textContent="等待主持確認你";statusEl.className="win";return}
+if(buzzed){buzzer.disabled=true;setBuzzerClass("done");buzzer.textContent="已按鍵";statusEl.textContent=winnerName&&winnerId!==myId?winnerName+" 搶到了，你已按鍵":"已按鍵，等待主持";return}
+buzzer.disabled=false;
+if(phase!=="live"){setBuzzerClass("armed");buzzer.textContent="未開搶";statusEl.textContent="未開搶，請勿提前按";return}
+setBuzzerClass("live");
+if(winnerName&&winnerId!==myId){buzzer.textContent="按鍵";statusEl.textContent=winnerName+" 搶到了，你仍可按鍵";return}
+buzzer.textContent="搶我搶答";statusEl.textContent="開搶！可以搶答"}
+function applyControl(data){if(!data||data.room!==room)return;if(typeof data.seq==="number"&&data.seq<=lastSeq)return;if(typeof data.seq==="number")lastSeq=data.seq;ready=true;
+var nextRound=Number(data.round)||1;if(nextRound!==localRound){localRound=nextRound;buzzed=false;fouled=false;passedMe=false;orderList=[]}
+phase=data.phase==="live"?"live":"hold";questionEl.dataset.q=String(data.question||"").slice(0,200);
+winnerId=data.winnerId||null;winnerName=data.winnerName||"";passedMe=Array.isArray(data.passed)&&data.passed.indexOf(myId)!==-1;
+board=Array.isArray(data.board)?data.board.slice(0,40):[];onlineIds=Array.isArray(data.online)?data.online:[];
+orderList=Array.isArray(data.order)?data.order.slice(0,30):[];
+var forgiven=Array.isArray(data.forgiven)?data.forgiven:[];if(forgiven.indexOf(myId)!==-1)fouled=false;render()}
+function attach(nextRoom){window.clearInterval(beatTimer);if(channel){try{channel.unsubscribe()}catch(e){}channel=null}
+room=nextRoom;ready=false;phase="hold";localRound=0;lastSeq=0;buzzed=false;fouled=false;winnerId=null;winnerName="";passedMe=false;board=[];onlineIds=[];orderList=[];questionEl.dataset.q="";
+channel=ably.channels.get("quiz-"+room);channel.subscribe("control",function(m){applyControl(m.data||{})});
+var beat=function(){if(!channel||!connected)return;channel.publish("here",{id:myId,name:name})};beat();beatTimer=setInterval(beat,4000);render()}
+function start(nextRoom,nextName){room=nextRoom;name=nextName;localStorage.setItem("buzzer-name",name);localStorage.setItem("buzzer-room",room);joinEl.hidden=true;padEl.hidden=false;
+if(!ably){ably=new Ably.Realtime(KEY);ably.connection.on(function(ch){connected=ch.current==="connected";if(connected&&channel)channel.publish("here",{id:myId,name:name});render()})}
+attach(room)}
+function press(){if(!connected||!ready||buzzed||fouled)return;if(phase!=="live"){fouled=true;channel.publish("foul",{id:myId,name:name});render();return}
+buzzed=true;channel.publish("buzz",{id:myId,name:name},function(err){if(err){buzzed=false;statusEl.textContent="送唔出，再按一次";render()}});render()}
+document.getElementById("enter").onclick=function(){var r=normalizeRoom(document.getElementById("room").value);var n=cleanName(document.getElementById("name").value);
+if(!r){document.getElementById("join-error").textContent="房號要 4 個英文字或數字";return}document.getElementById("join-error").textContent="";start(r,n)};
+buzzer.onclick=press;document.getElementById("switch").onclick=function(){window.clearInterval(beatTimer);if(channel){try{channel.unsubscribe()}catch(e){}channel=null}padEl.hidden=true;joinEl.hidden=false};
+var qr=normalizeRoom(new URLSearchParams(location.search).get("room"));var sn=localStorage.getItem("buzzer-name")||"";
+if(qr)document.getElementById("room").value=qr;if(sn)document.getElementById("name").value=sn;
+if(qr&&sn&&window.Ably)start(qr,cleanName(sn));
 </script></body></html>
