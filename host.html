@@ -1,1 +1,28 @@
-<PLACEHOLDER>
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>主持 · 小天才搶答器</title></head>
+<body style="margin:0;font-family:PingFang TC,sans-serif;background:#fff6e8;padding:24px"><p id="m">🎮 載入主持頁…</p>
+<script>
+(async function(){
+  try{
+    var urls=[
+      "https://cdn.jsdelivr.net/gh/csfclayton/buzzer-user@f9e0db64/host.html",
+      "https://raw.githack.com/csfclayton/buzzer-user/f9e0db64/host.html",
+      "https://raw.githubusercontent.com/csfclayton/buzzer-user/f9e0db64/host.html"
+    ];
+    var html=null, lastErr=null;
+    for (var i=0;i<urls.length;i++){
+      try{
+        var r=await fetch(urls[i]+(urls[i].indexOf("?")>=0?"&":"?")+"t="+Date.now());
+        if(!r.ok) throw new Error(r.status);
+        html=await r.text();
+        if(html && html.indexOf("PLACEHOLDER")<0 && html.indexOf("makeRoom")>=0) break;
+        html=null;
+      }catch(e){ lastErr=e; }
+    }
+    if(!html) throw lastErr||new Error("無法載入");
+    document.open(); document.write(html); document.close();
+  }catch(e){
+    document.getElementById("m").innerHTML="載入失敗："+e+"<br><a href='https://cdn.jsdelivr.net/gh/csfclayton/buzzer-user@f9e0db64/host.html'>點此直接開啟主持頁</a>";
+  }
+})();
+</script></body></html>
