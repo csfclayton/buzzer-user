@@ -6,7 +6,7 @@
   try{
     var n=13,s="";
     for(var i=0;i<n;i++){
-      var r=await fetch("pc"+i+".txt?v=25");
+      var r=await fetch("pc"+i+".txt?v=26");
       if(!r.ok)throw new Error("pc"+i);
       s+=await r.text();
     }
