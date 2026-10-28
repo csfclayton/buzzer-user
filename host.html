@@ -6,7 +6,7 @@
   try{
     var n=16,s="";
     for(var i=0;i<n;i++){
-      var r=await fetch("hc"+i+".txt?v=26");
+      var r=await fetch("hc"+i+".txt?v=27");
       if(!r.ok)throw new Error("hc"+i);
       s+=await r.text();
     }
