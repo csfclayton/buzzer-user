@@ -4,12 +4,9 @@
 <script>
 (async function(){
   try{
-    var n=13,s="";
-    for(var i=0;i<n;i++){
-      var r=await fetch("h"+i+".txt?v=30");
-      if(!r.ok)throw new Error("h"+i);
-      s+=await r.text();
-    }
+    var a=await fetch("p1.txt?v=31"); if(!a.ok)throw new Error("p1");
+    var b=await fetch("p2.txt?v=31"); if(!b.ok)throw new Error("p2");
+    var s=(await a.text())+(await b.text());
     var html=decodeURIComponent(escape(atob(s)));
     document.open();document.write(html);document.close();
   }catch(e){
