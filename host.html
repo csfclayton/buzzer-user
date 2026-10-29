@@ -4,12 +4,9 @@
 <script>
 (async function(){
   try{
-    var n=19,s="";
-    for(var i=0;i<n;i++){
-      var r=await fetch("hc"+i+".txt?v=28");
-      if(!r.ok)throw new Error("hc"+i);
-      s+=await r.text();
-    }
+    var r=await fetch("host.b64?v=28");
+    if(!r.ok)throw new Error("host.b64");
+    var s=await r.text();
     var html=decodeURIComponent(escape(atob(s)));
     document.open();document.write(html);document.close();
   }catch(e){
