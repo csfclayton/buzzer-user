@@ -1,134 +1,19 @@
 <!DOCTYPE html>
-<html lang="zh-Hant"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>主持 · 小天才搶答器</title>
-<style>
-:root{--bg:#fff6e8;--card:#fff;--line:#ffd6a5;--pri:#ff8c42;--bad:#e74c3c;--text:#2c3e50;--muted:#7f8c8d}
-*{box-sizing:border-box}body{margin:0;font-family:"PingFang TC",system-ui,sans-serif;background:var(--bg);color:var(--text);padding:12px}
-.wrap{max-width:720px;margin:0 auto}.card{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:10px;box-shadow:0 3px 0 rgba(255,140,66,.12)}
-.title{font-size:16px;font-weight:800;margin:0 0 6px}.hint{font-size:12px;color:var(--muted);margin:4px 0 0}
-.code{font-size:32px;font-weight:900;letter-spacing:.18em;color:var(--pri);margin:2px 0}
-input,textarea,button{font:inherit}input,textarea{width:100%;border:2px solid var(--line);border-radius:10px;padding:8px 10px}
-button{border:0;border-radius:10px;padding:8px 12px;background:#ffe8d1;font-weight:700;cursor:pointer}
-button.primary{background:var(--pri);color:#fff}button.danger{background:#ffe0e0;color:#c0392b}
-.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}
-.score-row{display:flex;align-items:center;justify-content:space-between;background:#fff3e0;border:2px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:6px}
-.score-actions{display:inline-flex;align-items:center;gap:6px}
-.score-num{font-weight:800;min-width:2em;text-align:center}
-.btn-adj{min-width:40px;padding:4px 8px;font-weight:800;border:2px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}
-#qrcode{width:140px;height:140px;background:#fff;padding:6px;border-radius:14px;border:3px dashed var(--pri)}
-#qrcode img{display:block;width:124px;height:124px}
-.error{color:var(--bad);font-weight:700;font-size:13px}
-</style></head><body><div class="wrap">
-<header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-<p style="margin:0;font-weight:900;font-size:17px">🎮 小天才搶答器 · 主持</p>
-<span id="status" style="font-weight:800;font-size:13px;padding:4px 10px;border-radius:999px;background:#fff;border:2px solid #ffe0b8">準備中</span>
-</header>
-<div class="card"><div class="row">
-<div style="text-align:center">
-<p class="hint">🔑 房號（4位）</p>
-<p class="code" id="room">----</p>
-<button type="button" class="danger" id="new-room" style="margin-top:4px">🏠 開新房</button>
-</div>
-<div style="flex:1;min-width:160px">
-<p class="hint">🔗 選手連結</p>
-<div style="display:flex;gap:6px;margin-top:4px"><input id="join-url" readonly style="font-size:12px"><button id="copy" type="button">📋</button></div>
-<p class="hint">掃 QR 或貼連結入房</p>
-</div>
-<div><div id="qrcode"></div><p class="hint" style="text-align:center">📱 掃碼入房</p></div>
-</div></div>
-<div class="card"><p class="title">📚 題目清單</p>
-<textarea id="qbank" rows="3" placeholder="每行一題"></textarea>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-<button type="button" id="qbank-load">📥 載入</button>
-<button type="button" class="primary" id="qbank-next">➡️ 下一題</button>
-<button type="button" id="qbank-prev">⬅️ 上一題</button>
-</div>
-<p class="hint" id="qbank-status">未載入</p></div>
-<div class="card"><p class="title">📝 本輪題目</p>
-<textarea id="question" rows="2" maxlength="200"></textarea>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-<button class="primary" id="start" type="button">▶️ 開始搶答</button>
-<button id="pause" type="button">⏸️ 暫停</button>
-<button id="next" type="button">⏭️ 下一輪</button>
-</div>
-<p class="error" id="error"></p></div>
-<div class="card"><p class="title">🏆 分數（±5 可調）</p>
-<div id="scores"></div>
-<button class="danger" id="reset" type="button" style="margin-top:8px">🧹 清空分數</button></div>
-<div class="card"><p class="title">⚡ 本輪搶答</p><div id="buzzes"></div></div>
-<div class="card"><p class="title">📋 答題紀錄</p><div id="records" style="max-height:160px;overflow:auto;font-size:12px"></div></div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/ably@1.2.50/build/ably.min.js"></script>
+<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>主持 · 小天才搶答器</title></head>
+<body style="margin:0;font-family:PingFang TC,sans-serif;background:#fff6e8;padding:24px"><p id="m">🎮 載入中…</p>
 <script>
-(function(){
-var KEY="Nta7rA.R_3OIg:p4OAZ8Z8_mgfKaLTDl1rPWiKn7aMb12txQ2H2s8EuLo";
-var ALPH="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-function makeRoom(){var c="";for(var i=0;i<4;i++)c+=ALPH[Math.floor(Math.random()*ALPH.length)];return c}
-function normalizeRoom(r){var c=String(r||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);return /^[A-Z0-9]{4}$/.test(c)?c:""}
-var params=new URLSearchParams(location.search);
-var room=normalizeRoom(params.get("room"))||makeRoom();
-if(!params.get("room")||normalizeRoom(params.get("room"))!==room){var u=new URL(location.href);u.search="?room="+room;history.replaceState(null,"",u.pathname+u.search)}
-document.getElementById("room").textContent=room;
-var questionEl=document.getElementById("question"),errorEl=document.getElementById("error"),statusEl=document.getElementById("status");
-var scores={},buzzes=[],fouls=[],passed={},forgiven={},lastQr="",qTimer=0,qBank=[],qBankIdx=-1;
-var phase="closed",question="",records=[],channel=null,ably=null;
-function playerUrl(){var u=new URL("index.html",location.href);u.search="?room="+room;return u.toString()}
-function parseQBank(t){return String(t||"").split(/\r?\n/).map(function(l){return l.replace(/^\s*[0-9]+[.)、.\s]+/,"").trim()}).filter(Boolean).map(function(l){return l.slice(0,200)}).slice(0,100)}
-function renderQBankStatus(){var el=document.getElementById("qbank-status");if(!qBank.length){el.textContent="未載入題目";return}el.textContent="清單 "+qBank.length+" 題 · 第 "+(qBankIdx<0?"—":qBankIdx+1)+" 題"}
-function setQ(idx){if(idx<0||idx>=qBank.length)return;qBankIdx=idx;question=qBank[idx];questionEl.value=question;publishControl();renderQBankStatus()}
-function loadQBank(){var ta=document.getElementById("qbank");qBank=parseQBank(ta.value);qBankIdx=-1;try{localStorage.setItem("buzzer-qbank",ta.value)}catch(e){}
-if(!qBank.length){renderQBankStatus();errorEl.textContent="清單空";return}if(!question.trim())setQ(0);else renderQBankStatus();errorEl.textContent="已載入 "+qBank.length+" 題 ✅"}
-function nextFromBank(){if(!qBank.length){errorEl.textContent="請先載入";return}if(qBankIdx+1>=qBank.length){errorEl.textContent="已到最後";return}setQ(qBankIdx+1);errorEl.textContent=""}
-function prevFromBank(){if(!qBank.length){errorEl.textContent="請先載入";return}if(qBankIdx<=0){errorEl.textContent="已係第一題";return}setQ(qBankIdx-1);errorEl.textContent=""}
-function publishControl(){if(!channel)return;channel.publish("control",{type:"control",phase:phase,question:question,scores:scores,buzzes:buzzes,fouls:fouls,forgiven:forgiven,passed:passed,records:records,ts:Date.now()})}
-function openRound(){phase="open";buzzes=[];forgiven={};fouls.forEach(function(f){forgiven[f]=true});passed={};window._openAt=performance.now();publishControl();render()}
-function holdRound(){phase="closed";publishControl();render()}
-function nextRound(){phase="closed";buzzes=[];passed={};if(qBank.length&&qBankIdx+1<qBank.length){qBankIdx++;question=qBank[qBankIdx];questionEl.value=question}publishControl();render();renderQBankStatus()}
-function adjustScore(id,d){scores[id]=(Number(scores[id])||0)+d;publishControl();render()}
-function acceptBuzz(d){if(phase!=="open")return;var name=d.name||"?";if(passed[name]||buzzes.some(function(b){return b.name===name}))return;
-var reactionUs=d.reactionUs!=null?d.reactionUs:(performance.now()-(window._openAt||0));
-buzzes.push({name:name,reactionUs:reactionUs,ts:Date.now()});if(!(name in scores))scores[name]=0;publishControl();render()}
-function acceptFoul(d){var name=d.name||"?";if(fouls.indexOf(name)<0)fouls.push(name);publishControl();render()}
-function noteHere(d){var name=d.name||"?";if(!(name in scores))scores[name]=0;render()}
-function updateQR(){var base=playerUrl();document.getElementById("join-url").value=base;if(lastQr===base)return;lastQr=base;
-var box=document.getElementById("qrcode");box.innerHTML="";var img=document.createElement("img");img.width=124;img.height=124;img.alt="QR";
-img.src="https://api.qrserver.com/v1/create-qr-code/?size=124x124&data="+encodeURIComponent(base);box.appendChild(img)}
-function render(){statusEl.textContent=phase==="open"?"搶答中 🔥":"暫停 / 準備";
-var sc=document.getElementById("scores"),names=Object.keys(scores).sort();
-if(!names.length)sc.innerHTML="<p class=\"hint\">暫無選手</p>";
-else sc.innerHTML=names.map(function(n){return '<div class="score-row"><b>'+n+'</b><span class="score-actions"><button type="button" class="btn-adj" data-id="'+n+'" data-adj="-5">−5</button><span class="score-num">'+(scores[n]||0)+'</span><button type="button" class="btn-adj" data-id="'+n+'" data-adj="5">+5</button></span></div>'}).join("");
-var bz=document.getElementById("buzzes");
-if(!buzzes.length)bz.innerHTML="<p class=\"hint\">等待搶答…</p>";
-else bz.innerHTML=buzzes.map(function(b,i){return "<div>"+(i+1)+". <b>"+b.name+"</b> · "+Math.round(b.reactionUs||0)+"ms"+(i===0?" ⭐":"")+"</div>"}).join("");
-var rec=document.getElementById("records");
-if(!records.length)rec.innerHTML="<p class=\"hint\">尚未有紀錄</p>";
-else rec.innerHTML=records.map(function(r){return "<div>"+r.t+" · <b>"+r.name+"</b> · +"+r.p+"</div>"}).join("");
-updateQR()}
-function newRoom(){var n=makeRoom();if(n===room)n=makeRoom();room=n;
-var u=new URL(location.href);u.search="?room="+room;history.replaceState(null,"",u.pathname+u.search);
-document.getElementById("room").textContent=room;scores={};buzzes=[];fouls=[];passed={};forgiven={};records=[];phase="closed";question="";
-if(channel)try{channel.unsubscribe()}catch(e){}
-if(ably){channel=ably.channels.get("quiz-"+room);channel.subscribe("buzz",function(m){acceptBuzz(m.data||{})});channel.subscribe("foul",function(m){acceptFoul(m.data||{})});channel.subscribe("here",function(m){noteHere(m.data||{})})}
-lastQr="";publishControl();render();errorEl.textContent="已開新房 "+room+" · 請掃新 QR ✅"}
-document.getElementById("qbank-load").onclick=loadQBank;
-document.getElementById("qbank-next").onclick=nextFromBank;
-document.getElementById("qbank-prev").onclick=prevFromBank;
-try{var s=localStorage.getItem("buzzer-qbank");if(s)document.getElementById("qbank").value=s}catch(e){}
-renderQBankStatus();
-document.getElementById("start").onclick=openRound;
-document.getElementById("pause").onclick=holdRound;
-document.getElementById("next").onclick=nextRound;
-document.getElementById("reset").onclick=function(){if(confirm("清空所有分數？")){scores={};publishControl();render()}};
-document.getElementById("new-room").onclick=function(){if(confirm("開新房會清空分數，確定？"))newRoom()};
-document.getElementById("copy").onclick=async function(){try{await navigator.clipboard.writeText(playerUrl());errorEl.textContent="已複製 ✅"}catch(e){document.getElementById("join-url").select()}};
-document.addEventListener("click",function(e){var b=e.target.closest("[data-adj]");if(b)adjustScore(b.getAttribute("data-id"),Number(b.getAttribute("data-adj"))||0)});
-questionEl.addEventListener("input",function(){question=questionEl.value.slice(0,200);clearTimeout(qTimer);qTimer=setTimeout(publishControl,400)});
-try{ably=new Ably.Realtime({key:KEY,clientId:"host-"+Math.random().toString(36).slice(2)});
-channel=ably.channels.get("quiz-"+room);
-channel.subscribe("buzz",function(m){acceptBuzz(m.data||{})});
-channel.subscribe("foul",function(m){acceptFoul(m.data||{})});
-channel.subscribe("here",function(m){noteHere(m.data||{})});
-publishControl();render();updateQR()}catch(e){errorEl.textContent="連線失敗，請重新整理";updateQR()}
+(async function(){
+  try{
+    var n=12,s="";
+    for(var i=0;i<n;i++){
+      var r=await fetch("rh"+i+".txt?v=41");
+      if(!r.ok)throw new Error("rh"+i);
+      s+=await r.text();
+    }
+    var html=decodeURIComponent(escape(atob(s)));
+    document.open();document.write(html);document.close();
+  }catch(e){
+    document.getElementById("m").textContent="載入失敗："+e.message+"。請重新整理。";
+  }
 })();
 </script></body></html>
