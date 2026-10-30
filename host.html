@@ -4,14 +4,13 @@
 <script>
 (async function(){
   try{
-    var r=await fetch("host.gz.b64?v=43");
-    if(!r.ok)throw new Error("host.gz.b64");
-    var b64=await r.text();
-    var bin=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0)});
-    var ds=new DecompressionStream("gzip");
-    var stream=new Response(bin).body.pipeThrough(ds);
-    var html=await new Response(stream).text();
-    document.open();document.write(html);document.close();
+    var parts=[];
+    for(var i=0;i<4;i++){
+      var r=await fetch("hq"+i+".txt?v=43");
+      if(!r.ok)throw new Error("hq"+i);
+      parts.push(await r.text());
+    }
+    document.open();document.write(parts.join(""));document.close();
   }catch(e){
     document.getElementById("m").textContent="載入失敗："+e.message+"。請重新整理。";
   }
