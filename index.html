@@ -1,19 +1,122 @@
 <!DOCTYPE html>
-<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>小天才搶答器</title></head>
-<body style="margin:0;font-family:sans-serif;background:#fff6e8;padding:24px"><p id="m">🎮 載入中…</p>
+<html lang="zh-Hant"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><title>小天才搶答器</title>
+<style>
+:root{--bg:#fff6e8;--card:#fff;--ink:#2b1d12;--muted:#8a6e55;--line:#f0d9b8;--red:#ff5a6a;--green:#3ecf7a}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;font-family:"PingFang TC",sans-serif;background:var(--bg);color:var(--ink);padding:18px}
+.wrap{max-width:420px;margin:0 auto}h1{font-size:26px;margin:0;font-weight:900}
+.hint{color:var(--muted);font-size:14px;font-weight:600}
+label{display:block;margin:14px 0 6px;font-size:14px;color:var(--muted);font-weight:800}
+input{width:100%;min-height:52px;border:3px solid var(--line);border-radius:18px;padding:0 14px;font-size:18px;font-weight:700}
+button{font:inherit;cursor:pointer}
+.go{width:100%;min-height:56px;margin-top:16px;border:0;border-radius:999px;background:linear-gradient(180deg,#ff8a95,var(--red));color:#fff;font-weight:900;font-size:18px}
+.card{background:var(--card);border-radius:24px;padding:18px;margin-top:14px;text-align:center;border:3px solid #ffe0b5}
+.pill{display:inline-flex;padding:0 12px;min-height:30px;align-items:center;border-radius:999px;border:2px solid var(--line);background:#fff;font-weight:800;font-size:14px}
+.pill.ok{background:#e8fff2;border-color:#7aefab}.pill.bad{background:#fff0f2;border-color:#ff8a95;color:#c42e3a}
+#buzzer{width:min(64vw,200px);height:min(64vw,200px);margin:18px auto 0;border-radius:50%;border:8px solid #fff;color:#fff;font-size:22px;font-weight:900}
+#buzzer.armed{background:var(--red)}#buzzer.live{background:var(--green);animation:p 1s infinite}#buzzer.done{background:#aab4bb}
+@keyframes p{50%{transform:scale(1.05)}}
+#status{margin-top:14px;font-size:18px;font-weight:800}
+.qbox{font-size:20px;font-weight:900;margin:14px 0 0;padding:12px;background:#fff9ef;border:3px solid #ffe0b5;border-radius:18px}
+.order-row{display:flex;justify-content:space-between;padding:8px;border-top:2px dashed var(--line);font-weight:700}
+.switch{width:100%;min-height:48px;margin-top:14px;border:3px solid var(--line);border-radius:999px;background:#fff;font-weight:800}
+[hidden]{display:none!important}
+</style></head><body><main class="wrap">
+<section id="join">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-size:32px">🎮</span><h1>小天才搶答器</h1></div>
+<p class="hint">輸入 4 位房號同名字</p>
+<label>🔑 房號</label><input id="room" maxlength="4" placeholder="例如 K7MP" autocapitalize="characters">
+<label>🙂 名字</label><input id="name" maxlength="12" placeholder="你的名字">
+<button class="go" id="enter" type="button">🚀 進入房間</button>
+<p id="join-error" style="color:var(--red);font-weight:800"></p>
+</section>
+<section id="pad" hidden>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+<span class="pill bad" id="conn">未連線</span>
+<span class="pill">房 <span id="show-room"></span></span>
+<span class="pill ok" id="show-name"></span>
+</div>
+<p id="question" class="qbox">等待主持出題…</p>
+<div class="card">
+<button id="buzzer" class="armed" type="button">✋ 搶答</button>
+<p id="status">搶答未開始…</p>
+</div>
+<div style="margin-top:12px;text-align:left"><p style="font-weight:900;color:var(--muted);font-size:13px">本輪順序</p><div id="order"></div></div>
+<button class="switch" id="leave" type="button">換房間 / 改名</button>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/ably@1.2.50/build/ably.min.js"></script>
 <script>
-(async function(){
-  try{
-    var n=13,s="";
-    for(var i=0;i<n;i++){
-      var r=await fetch("pc"+i+".txt?v=27");
-      if(!r.ok)throw new Error("pc"+i);
-      s+=await r.text();
-    }
-    var html=decodeURIComponent(escape(atob(s)));
-    document.open();document.write(html);document.close();
-  }catch(e){
-    document.getElementById("m").textContent="載入失敗："+e.message+"。請重新整理。";
-  }
+(function(){
+var KEY="Nta7rA.R_3OIg:p4OAZ8Z8_mgfKaLTDl1rPWiKn7aMb12txQ2H2s8EuLo";
+var myId=(function(){var s=localStorage.getItem("buzzer-id");if(s)return s;s=Math.random().toString(16).slice(2)+Date.now().toString(16);localStorage.setItem("buzzer-id",s);return s})();
+var ably=null,channel=null,room="",name="",connected=false,ready=false,phase="closed";
+var buzzed=false,fouled=false,passedMe=false,buzzList=[],lastOpenAt=0;
+var buzzer=document.getElementById("buzzer"),statusEl=document.getElementById("status");
+var connEl=document.getElementById("conn"),questionEl=document.getElementById("question"),orderEl=document.getElementById("order");
+function normalizeRoom(r){var c=String(r||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);return /^[A-Z0-9]{4}$/.test(c)?c:""}
+function cleanName(r){return String(r||"").replace(/[\u0000-\u001f]/g,"").trim().slice(0,12)||"神秘玩家"}
+function setCls(m){buzzer.classList.remove("armed","live","done");buzzer.classList.add(m)}
+function render(){
+  connEl.textContent=connected?"已連線":"未連線";connEl.className="pill "+(connected?"ok":"bad");
+  document.getElementById("show-room").textContent=room||"—";
+  document.getElementById("show-name").textContent=name||"—";
+  questionEl.textContent=questionEl.dataset.q||"等待主持出題…";
+  if(!connected){buzzer.disabled=true;setCls("done");buzzer.textContent="✋ 搶答";statusEl.textContent="連線中…";return}
+  if(!ready){buzzer.disabled=true;setCls("done");buzzer.textContent="⏳ 等待";statusEl.textContent="等待主持開局…";return}
+  if(fouled){buzzer.disabled=true;setCls("done");buzzer.textContent="🚫 犯規";statusEl.textContent="太早按！等下一題";return}
+  if(buzzed){buzzer.disabled=true;setCls("done");buzzer.textContent="✅ 已按鍵";statusEl.textContent="已按鍵，等待主持";return}
+  buzzer.disabled=false;
+  if(phase!=="open"){setCls("armed");buzzer.textContent="🔴 未開搶";statusEl.textContent="未開搶，唔好提前按";return}
+  setCls("live");buzzer.textContent="🟢 搶答！";statusEl.textContent="開搶！快按！";
+  orderEl.innerHTML=buzzList.length?buzzList.map(function(b,i){return "<div class=\"order-row\"><span>"+(i+1)+". "+b.name+(i===0?" ⭐":"")+"</span><span>"+Math.round(b.reactionUs||0)+"ms</span></div>"}).join(""):"<p class=\"hint\">尚未有人搶答</p>";
+}
+function applyControl(data){
+  if(!data)return;ready=true;
+  var prev=phase;
+  phase=(data.phase==="open"||data.phase==="live")?"open":"closed";
+  questionEl.dataset.q=String(data.question||"").slice(0,200);
+  if(Array.isArray(data.buzzes))buzzList=data.buzzes.map(function(b){return{name:b.name||"?",reactionUs:b.reactionUs||0}});
+  if(Array.isArray(data.fouls)&&data.fouls.indexOf(name)>=0)fouled=true;
+  if(data.passed&&data.passed[name])passedMe=true;
+  if(prev!=="open"&&phase==="open"){buzzed=false;passedMe=false;fouled=false;lastOpenAt=performance.now()}
+  if(phase==="open"&&data.buzzes&&data.buzzes.length===0){buzzed=false;passedMe=false}
+  render();
+}
+function doBuzz(){
+  if(!channel||phase!=="open"||buzzed||fouled)return;
+  var reactionUs=lastOpenAt?Math.max(0,performance.now()-lastOpenAt):0;
+  buzzed=true;
+  channel.publish("buzz",{name:name,id:myId,reactionUs:reactionUs,ts:Date.now()});
+  render();
+}
+function attach(){
+  if(channel)try{channel.unsubscribe()}catch(e){}
+  channel=ably.channels.get("quiz-"+room);
+  channel.subscribe("control",function(m){applyControl(m.data||{})});
+  channel.publish("here",{id:myId,name:name});
+  setInterval(function(){if(channel&&connected)channel.publish("here",{id:myId,name:name})},8000);
+}
+function start(r,n){
+  room=r;name=n;localStorage.setItem("buzzer-name",name);localStorage.setItem("buzzer-room",room);
+  document.getElementById("join").hidden=true;document.getElementById("pad").hidden=false;
+  buzzed=false;fouled=false;passedMe=false;ready=false;phase="closed";buzzList=[];
+  if(!ably){ably=new Ably.Realtime({key:KEY,clientId:myId});ably.connection.on(function(st){connected=st.current==="connected";if(connected){attach();channel&&channel.publish("here",{id:myId,name:name})}render()})}
+  else attach();
+  render();
+}
+document.getElementById("enter").onclick=function(){
+  var r=normalizeRoom(document.getElementById("room").value);
+  var n=cleanName(document.getElementById("name").value);
+  if(!r){document.getElementById("join-error").textContent="請輸入 4 位房號";return}
+  if(!n||n==="神秘玩家"){document.getElementById("join-error").textContent="請輸入名字";return}
+  document.getElementById("join-error").textContent="";start(r,n);
+};
+document.getElementById("leave").onclick=function(){document.getElementById("join").hidden=false;document.getElementById("pad").hidden=true;if(channel)try{channel.unsubscribe()}catch(e){}};
+buzzer.onclick=doBuzz;
+document.getElementById("room").value=localStorage.getItem("buzzer-room")||"";
+document.getElementById("name").value=localStorage.getItem("buzzer-name")||"";
+var p=new URLSearchParams(location.search);if(p.get("room"))document.getElementById("room").value=normalizeRoom(p.get("room"))||p.get("room");
 })();
 </script></body></html>

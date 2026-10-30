@@ -81,7 +81,7 @@ function loadQBank(){var ta=document.getElementById("qbank");qBank=parseQBank(ta
 if(!qBank.length){renderQBankStatus();errorEl.textContent="清單空";return}if(!question.trim())setQ(0);else renderQBankStatus();errorEl.textContent="已載入 "+qBank.length+" 題 ✅"}
 function nextFromBank(){if(!qBank.length){errorEl.textContent="請先載入";return}if(qBankIdx+1>=qBank.length){errorEl.textContent="已到最後";return}setQ(qBankIdx+1);errorEl.textContent=""}
 function prevFromBank(){if(!qBank.length){errorEl.textContent="請先載入";return}if(qBankIdx<=0){errorEl.textContent="已係第一題";return}setQ(qBankIdx-1);errorEl.textContent=""}
-function publishControl(){if(!channel)return;channel.publish({type:"control",phase:phase,question:question,scores:scores,buzzes:buzzes,fouls:fouls,forgiven:forgiven,passed:passed,records:records,ts:Date.now()})}
+function publishControl(){if(!channel)return;channel.publish("control",{type:"control",phase:phase,question:question,scores:scores,buzzes:buzzes,fouls:fouls,forgiven:forgiven,passed:passed,records:records,ts:Date.now()})}
 function openRound(){phase="open";buzzes=[];forgiven={};fouls.forEach(function(f){forgiven[f]=true});passed={};window._openAt=performance.now();publishControl();render()}
 function holdRound(){phase="closed";publishControl();render()}
 function nextRound(){phase="closed";buzzes=[];passed={};if(qBank.length&&qBankIdx+1<qBank.length){qBankIdx++;question=qBank[qBankIdx];questionEl.value=question}publishControl();render();renderQBankStatus()}
