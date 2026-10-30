@@ -4,9 +4,9 @@
 <script>
 (async function(){
   try{
-    var r=await fetch("host.gz.b64?v=42");
-    if(!r.ok)throw new Error("host.gz.b64");
-    var b64=await r.text();
+    var a=await fetch("hg1.txt?v=42"); if(!a.ok)throw new Error("hg1");
+    var b=await fetch("hg2.txt?v=42"); if(!b.ok)throw new Error("hg2");
+    var b64=(await a.text())+(await b.text());
     var bin=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0)});
     var ds=new DecompressionStream("gzip");
     var stream=new Response(bin).body.pipeThrough(ds);
