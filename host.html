@@ -1,18 +1,201 @@
 <!DOCTYPE html>
-<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>主持 · 小天才搶答器</title></head>
-<body style="margin:0;font-family:PingFang TC,sans-serif;background:#fff6e8;padding:24px"><p id="m">🎮 載入主持頁…</p>
+<html lang="zh-Hant"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><title>主持 · 小天才搶答器</title>
+<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#fff6e8;--card:#ffffff;--ink:#2b1d12;--muted:#8a6e55;--line:#f0d9b8;
+  --red:#ff5a6a;--red2:#ff8a95;--green:#3ecf7a;--green2:#7aefab;
+  --yellow:#ffd24a;--blue:#5bb8ff;--purple:#b388ff;--orange:#ff9f43;
+  --shadow:0 10px 0 rgba(255,180,100,.25),0 14px 28px rgba(80,40,10,.08);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"PingFang TC","Microsoft JhengHei","Comic Sans MS",cursive,sans-serif;background:
+  radial-gradient(circle at 12% 18%,#ffe8a8 0,transparent 42%),
+  radial-gradient(circle at 88% 12%,#ffd0e0 0,transparent 40%),
+  radial-gradient(circle at 70% 90%,#c8f5d8 0,transparent 45%),
+  var(--bg);color:var(--ink);padding:16px;min-height:100dvh}
+.wrap{max-width:1000px;margin:0 auto}
+.code{font-size:clamp(42px,9vw,76px);letter-spacing:.18em;margin:0;line-height:.95;font-weight:900;
+  background:linear-gradient(135deg,var(--orange),var(--red));-webkit-background-clip:text;background-clip:text;color:transparent}
+.card{background:var(--card);border-radius:28px;padding:16px 18px;margin-top:14px;box-shadow:var(--shadow);
+  border:3px solid #ffe0b8;position:relative}
+.card h3,.card .title{margin:0 0 8px;font-size:15px;letter-spacing:.08em;color:var(--muted);font-weight:800}
+button{min-height:48px;border-radius:999px;border:3px solid #ffe0b8;background:#fff;padding:0 16px;font:inherit;font-weight:800;cursor:pointer;
+  box-shadow:0 4px 0 #f0c890;transition:transform .08s,box-shadow .08s}
+button:active{transform:translateY(3px);box-shadow:0 1px 0 #f0c890}
+.primary{background:linear-gradient(180deg,var(--green2),var(--green));color:#fff;border-color:#2aaa5c;box-shadow:0 4px 0 #2a9a55}
+.danger{color:var(--red);border-color:transparent;background:transparent;box-shadow:none;font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.hint{color:var(--muted);font-size:13px;margin:0;font-weight:600}
+#qrcode{width:148px;height:148px;background:#fff;padding:8px;border-radius:24px;border:3px dashed var(--orange);box-shadow:var(--shadow)}
+#qrcode img,#qrcode canvas{display:block;width:128px!important;height:128px!important}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid #ffe0b8;border-radius:999px;margin:3px;background:#fff8ee;font-weight:700}
+.chip.foul{border-color:#ffb0b8;background:#fff0f2;color:var(--red)}
+.mini{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(62,207,122,.25)}
+textarea{width:100%;border:0;font-size:22px;font-weight:800;resize:none;background:transparent;font-family:inherit}
+.err{color:var(--red);font-weight:700}
+.score-row,.time-row,.foul-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 6px;border-top:2px dashed var(--line);font-weight:700}
+input{min-height:48px;border:3px solid #ffe0b8;border-radius:16px;padding:0 12px;flex:1;font:inherit;font-weight:700;background:#fff}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--yellow);font-size:12px;font-weight:900;border:2px solid #e6b800}
+.answer-clock{font-size:40px;font-weight:900;font-variant-numeric:tabular-nums;color:var(--orange);margin-top:8px}
+.answer-label{font-size:13px;color:var(--muted);font-weight:700}
+.rec-row{border-top:2px dashed var(--line);padding:10px 6px;font-weight:700}
+.rec-row .rmeta{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted);font-weight:700;margin-top:4px}
+.time-abs{font-variant-numeric:tabular-nums;font-weight:900}
+.time-abs.first{color:var(--green)}
+.logo{font-size:28px;margin-right:6px}
+.btn-forgive{min-height:36px;padding:0 12px;font-size:13px;background:linear-gradient(180deg,#ffe8a0,var(--yellow));border-color:#e6b800;box-shadow:0 3px 0 #d4a800;color:#5a3e00}.score-actions{display:inline-flex;align-items:center;gap:6px}
+.score-num{font-weight:800;min-width:2.2em;text-align:center}
+.btn-adj{min-height:32px;min-width:40px;padding:0 8px;font-size:13px;font-weight:800;border:2px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);cursor:pointer}
+.btn-adj:active{transform:scale(.96)}
+
+header .status-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#fff;border:2px solid #ffe0b8;font-weight:800;font-size:13px}
+</style></head><body><main class="wrap">
+<header style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+<p style="margin:0;font-weight:900;font-size:18px;letter-spacing:.04em"><span class="logo">🎮</span>小天才搶答器 · 主持</p>
+<span class="status-pill" id="conn">連線中</span>
+</header>
+<div class="row" style="margin-top:12px">
+<div><p class="hint">🔑 房號</p><p class="code" id="code">----</p></div>
+<div style="flex:1;min-width:200px"><p class="hint">🔗 選手連結</p>
+<div style="display:flex;gap:8px"><input id="player-link" readonly><button id="copy" type="button">📋 複製</button></div>
+<p class="hint">選手可掃 QR 入房。唔好把呢頁俾學生。</p></div>
+<div><div id="qrcode"></div><p class="hint" style="text-align:center;margin-top:4px">📱 掃碼入房</p></div>
+</div>
+<div class="card"><p class="title">👥 已連線 <span id="online-count">0</span></p><div id="online"></div></div>
+<div class="card"><label class="title" for="question">📝 題目（選手會見到）</label>
+<textarea id="question" rows="2" maxlength="200" placeholder="這一題要問什麼？"></textarea>
+<div id="stage" style="margin-top:8px"></div><p class="err" id="error"></p></div>
+<div class="card"><p class="title">🏆 分數</p><div id="scores"></div></div>
+<div class="card"><p class="title">⏱️ 本輪各選手搶答時間</p><div id="timeline"></div><p class="hint" style="margin-top:8px">由開放搶答到按下的時間</p></div>
+<div class="card"><p class="title">📝 答題紀錄</p><div id="records"></div></div>
+<div class="card"><p class="title">⚠️ 犯規名單（可解除）</p><div id="foul-list"></div></div>
+<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px">
+<button class="danger" id="clear" type="button">🧹 清空分數</button>
+<button class="danger" id="new-room" type="button">🏠 開新房</button>
+</div>
+</main>
 <script>
-(async function(){
-  try{
-    var parts=[];
-    for(var i=0;i<4;i++){
-      var r=await fetch("hq"+i+".txt?v=43");
-      if(!r.ok)throw new Error("hq"+i);
-      parts.push(await r.text());
-    }
-    document.open();document.write(parts.join(""));document.close();
-  }catch(e){
-    document.getElementById("m").textContent="載入失敗："+e.message+"。請重新整理。";
-  }
+(function(){
+function ac(){if(!window._ac)window._ac=new (window.AudioContext||window.webkitAudioContext)();return window._ac}
+function tone(freq,dur,type,vol,delay){try{var c=ac(),o=c.createOscillator(),g=c.createGain();o.type=type||"sine";o.frequency.value=freq;g.gain.value=vol||0.15;o.connect(g);g.connect(c.destination);var t=c.currentTime+(delay||0);o.start(t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);o.stop(t+dur+0.02)}catch(e){}}
+function sndOpen(){tone(523,0.12,"triangle",0.18);tone(659,0.14,"triangle",0.16,0.1);tone(784,0.18,"triangle",0.14,0.22)}
+function sndBuzz(){tone(880,0.08,"square",0.12);tone(1100,0.1,"square",0.1,0.08)}
+function sndWin(){tone(523,0.1,"sine",0.15);tone(659,0.1,"sine",0.15,0.1);tone(784,0.12,"sine",0.15,0.2);tone(1046,0.2,"sine",0.18,0.32)}
+function sndJoin(){tone(660,0.08,"sine",0.12);tone(880,0.1,"sine",0.1,0.08)}
+function unlockAudio(){try{ac()}catch(e){}}
+
+const ALPH="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+var ably=null,channel=null,room="",seq=0,round=1,phase="hold",question="";
+var scores={},buzzes=[],fouls=[],passed={},forgiven={},online=[],seen={},lastQr="",qTimer=0;
+var openedPerf=0,answerActive=false,answerUs=0,answerT0=0,answerTimer=0,answerPub=0,records=[];
+var codeEl=document.getElementById("code"),linkEl=document.getElementById("player-link"),connEl=document.getElementById("conn");
+var onlineEl=document.getElementById("online"),onlineCountEl=document.getElementById("online-count"),stage=document.getElementById("stage");
+var questionEl=document.getElementById("question"),errorEl=document.getElementById("error"),scoresEl=document.getElementById("scores");
+var timelineEl=document.getElementById("timeline"),qrBox=document.getElementById("qrcode"),foulListEl=document.getElementById("foul-list");
+var recordsEl=document.getElementById("records");
+function cleanName(r){var n=String(r||"").replace(/[\u0000-\u001f]/g,"").trim().slice(0,12);return n||"神秘玩家"}
+function makeRoom(){var c="";for(var i=0;i<4;i++)c+=ALPH[Math.floor(Math.random()*ALPH.length)];return c}
+function normalizeRoom(r){var c=String(r||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);return /^[A-Z0-9]{4}$/.test(c)?c:""}
+function playerUrl(){var u=new URL("index.html",location.href);u.search="?room="+room;return u.toString()}
+function winner(){return buzzes.find(function(b){return !passed[b.id]})||null}
+function fmtDelta(ms){return "+"+(Math.max(0,ms)/1000).toFixed(2)+"秒"}
+function fmtReaction(us){if(us==null||!isFinite(us)||us<0)return "—";return (us/1e6).toFixed(4)+"秒"}
+function fmtAnswer(us){if(us==null||!isFinite(us)||us<0)return "0.00秒";return (us/1e6).toFixed(2)+"秒"}
+function stopAnswerTimers(){clearInterval(answerTimer);clearInterval(answerPub);answerTimer=0;answerPub=0}
+function startAnswerTimers(){stopAnswerTimers();answerT0=performance.now();answerActive=true;answerUs=0;
+answerTimer=setInterval(function(){if(!answerActive)return;answerUs=Math.max(0,Math.round((performance.now()-answerT0)*1000));
+var el=document.getElementById("answer-clock");if(el)el.textContent=fmtAnswer(answerUs);},50);
+answerPub=setInterval(function(){if(!answerActive)return;answerUs=Math.max(0,Math.round((performance.now()-answerT0)*1000));publishControl();},250)}
+function pushRecord(result){var cur=winner();if(!cur)return;records.push({round:round,name:cur.name,id:cur.id,result:result,reactionUs:cur.reactionUs,answerUs:answerUs,question:question||""});if(records.length>40)records=records.slice(-40)}
+function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]})}
+function buzzOrder(){if(!buzzes.length)return[];var f=buzzes[0].at;return buzzes.map(function(b,i){return{id:b.id,name:b.name,place:i+1,deltaMs:Math.max(0,b.at-f),reactionUs:b.reactionUs}}).slice(0,30)}
+function roster(){var m={};Object.keys(scores).forEach(function(id){m[id]={id:id,name:cleanName(scores[id].name),score:Number(scores[id].score)||0}});online.forEach(function(p){if(!m[p.id])m[p.id]={id:p.id,name:p.name,score:0};else m[p.id].name=p.name});return Object.keys(m).map(function(id){return m[id]}).sort(function(a,b){return b.score-a.score||a.name.localeCompare(b.name,"zh-Hant")}).slice(0,40)}
+function updateQR(){var url=room?playerUrl():"";if(!url||url===lastQr)return;lastQr=url;qrBox.innerHTML="";
+if(window.QRCode){new QRCode(qrBox,{text:url,width:128,height:128,colorDark:"#1c2833",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});return}
+var img=document.createElement("img");img.width=128;img.height=128;img.alt="QR";img.src="https://api.qrserver.com/v1/create-qr-code/?size=128x128&data="+encodeURIComponent(url);qrBox.appendChild(img)}
+function publishControl(){if(!channel||!ably||ably.connection.state!=="connected")return;seq+=1;var cur=winner();
+channel.publish("control",{seq:seq,room:room,round:round,phase:phase,question:question,winnerId:cur?cur.id:null,winnerName:cur?cur.name:null,
+forgiven:Object.keys(forgiven),passed:Object.keys(passed),board:roster(),online:online.map(function(p){return p.id}),order:buzzOrder(),answerActive:answerActive,answerUs:answerUs})}
+function rebuildOnline(){var now=Date.now();Object.keys(seen).forEach(function(id){if(now-seen[id].at>20000)delete seen[id]});
+online=Object.keys(seen).map(function(id){return{id:id,name:seen[id].name}}).sort(function(a,b){return a.name.localeCompare(b.name,"zh-Hant")})}
+function noteHere(d){var id=String((d&&d.id)||"").slice(0,48);if(!id)return;var nm=cleanName(d.name);var prev=seen[id];var was=!!(prev&&Date.now()-prev.at<12000);
+seen[id]={name:nm,at:Date.now()};rebuildOnline();renderOnline();if(!was||!prev||prev.name!==nm)setTimeout(publishControl,300)}
+function acceptBuzz(d){var id=String(d.id||"").slice(0,40),nm=cleanName(d.name);if(!id)return;if(buzzes.some(function(b){return b.id===id}))return;
+if(phase!=="live"||fouls.some(function(f){return f.id===id})){acceptFoul({id:id,name:nm});return}
+var first=!buzzes.length;var reactionUs=openedPerf?Math.max(0,Math.round((performance.now()-openedPerf)*1000)):0;
+buzzes.push({id:id,name:nm,at:Date.now(),reactionUs:reactionUs});if(!scores[id])scores[id]={name:nm,score:0};else scores[id].name=nm;
+if(first){sndWin();startAnswerTimers()}else sndBuzz();publishControl();render()}
+function acceptFoul(d){var id=String(d.id||"").slice(0,40),nm=cleanName(d.name);if(!id||forgiven[id]||fouls.some(function(f){return f.id===id}))return;
+fouls.push({id:id,name:nm,at:Date.now()});if(!scores[id])scores[id]={name:nm,score:0};publishControl();render()}
+function forgivePlayer(id){id=String(id||"");if(!id)return;forgiven[id]=true;fouls=fouls.filter(function(f){return f.id!==id});publishControl();render()}
+function adjustScore(id,delta){id=String(id||"");if(!id)return;if(!scores[id])scores[id]={name:"玩家",score:0};scores[id].score=(Number(scores[id].score)||0)+delta;publishControl();render()}
+function openRound(){if(phase==="live")return;phase="live";buzzes=[];passed={};openedPerf=performance.now();answerActive=false;answerUs=0;stopAnswerTimers();unlockAudio();sndOpen();publishControl();render()}
+function holdRound(){phase="hold";answerActive=false;answerUs=0;stopAnswerTimers();publishControl();render()}
+function nextRound(award){var cur=winner();if(award&&cur){pushRecord("correct");if(!scores[cur.id])scores[cur.id]={name:cur.name,score:0};scores[cur.id].score=(Number(scores[cur.id].score)||0)+10;sndWin()}
+round+=1;phase="hold";buzzes=[];fouls=[];passed={};forgiven={};answerActive=false;answerUs=0;openedPerf=0;stopAnswerTimers();
+publishControl();render()}
+function passToNext(){var cur=winner();if(!cur)return;pushRecord("wrong");passed[cur.id]=true;answerActive=false;answerUs=0;stopAnswerTimers();
+var next=winner();if(next)startAnswerTimers();publishControl();render()}
+function renderStage(){var cur=winner();if(phase!=="live"){stage.innerHTML='<button class="primary" data-act="open" type="button">🚀 開始搶答!</button>';return}
+if(!cur){stage.innerHTML='<p style="font-size:28px;font-weight:800;margin:8px 0">🔥 搶答中…</p><button data-act="hold" type="button">⏸️ 暫停</button>';return}
+var react=fmtReaction(cur.reactionUs);
+var ansHtml=answerActive?'<div class="answer-clock" id="answer-clock">'+fmtAnswer(answerUs)+'</div><div class="answer-label">作答計時（搶到後開始）· 請即講答案</div>':'';
+stage.innerHTML='<p style="font-size:36px;font-weight:800;color:var(--red);margin:8px 0">'+esc(cur.name)+'</p>'
++'<p class="hint">搶答用時 '+react+'</p>'+ansHtml
++'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" data-act="award" type="button">⭐ 得分 +10 下一題</button><button data-act="pass" type="button">⏭️ 跳過下一位</button><button data-act="hold" type="button">⏸️ 暫停</button></div>'}
+function renderScores(){var rows=roster();if(!rows.length){scoresEl.innerHTML='<p class="hint">未有分數</p>';return}
+scoresEl.innerHTML=rows.map(function(r){return '<div class="score-row"><span>'+esc(r.name)+'</span><span class="score-actions"><button type="button" class="btn-adj" data-adj="-5" data-id="'+esc(r.id)+'">−5</button><span class="score-num">'+r.score+'</span><button type="button" class="btn-adj" data-adj="+5" data-id="'+esc(r.id)+'">+5</button></span></div>'}).join("")}
+function renderTimeline(){if(!buzzes.length){timelineEl.innerHTML='<p class="hint">未有人按</p>';return}
+timelineEl.innerHTML=buzzes.map(function(b,i){
+  var cls="time-abs"+(i===0?" first":"");
+  var t=fmtReaction(b.reactionUs);
+  var mark=passed[b.id]?' <span class="hint">（已跳過）</span>':'';
+  return '<div class="time-row"><span>'+(i+1)+' '+esc(b.name)+mark+'</span><span class="'+cls+'">'+t+'</span></div>';
+}).join("")}
+function renderRecords(){if(!recordsEl)return;if(!records.length){recordsEl.innerHTML='<p class="hint">答對或跳過後會出現紀錄</p>';return}
+recordsEl.innerHTML=records.slice().reverse().slice(0,25).map(function(r){
+  var ok=r.result==="correct";
+  var mark=ok?"✅ 答對":"❌ 答錯";
+  var color=ok?"var(--green)":"var(--red)";
+  var q=(r.question||"").slice(0,36)||"（無題目）";
+  return '<div class="rec-row"><div style="display:flex;justify-content:space-between;gap:8px"><span>第 '+r.round+' 題 · '+esc(r.name)+'</span><span style="color:'+color+'">'+mark+'</span></div>'
+  +'<div class="rmeta"><span>搶答 '+fmtReaction(r.reactionUs)+'</span><span>作答 '+fmtAnswer(r.answerUs)+'</span></div>'
+  +'<div class="hint" style="margin-top:2px">'+esc(q)+'</div></div>';
+}).join("")}
+function renderOnline(){rebuildOnline();onlineCountEl.textContent=String(online.length);
+if(!online.length){onlineEl.innerHTML='<p class="hint">等待選手入房…</p>';return}
+onlineEl.innerHTML=online.map(function(p){return '<span class="chip"><span class="mini"></span>'+esc(p.name)+'</span>'}).join("")}
+function renderFouls(){if(!fouls.length){foulListEl.innerHTML='<p class="hint">無犯規</p>';return}
+foulListEl.innerHTML=fouls.map(function(f){return '<div class="foul-row"><span class="chip foul">'+esc(f.name)+'</span><button type="button" class="btn-forgive" data-forgive="'+esc(f.id)+'">解除</button></div>'}).join("")
++'<button type="button" class="btn-forgive" id="forgive-all" style="margin-top:8px">解除全部</button>'}
+function render(){codeEl.textContent=room||"----";linkEl.value=room?playerUrl():"";connEl.textContent=ably&&ably.connection.state==="connected"?"已連線":"連線中";
+renderStage();renderScores();renderTimeline();renderRecords();renderOnline();renderFouls();updateQR()}
+function detach(){if(channel){try{channel.unsubscribe()}catch(e){}}channel=null}
+function join(next,fresh){detach();room=next;seen={};online=[];if(fresh){seq=0;round=1;phase="hold";question="";scores={};buzzes=[];fouls=[];passed={};forgiven={};records=[];answerActive=false;answerUs=0;openedPerf=0;stopAnswerTimers()}
+var url=new URL(location.href);url.search="?room="+room;history.replaceState(null,"",url.pathname+url.search);
+if(!ably){ably=new Ably.Realtime({key:"xVLyHw.5Q0_Vw:H8qJ9vK3mN2pL7rT0wY4zX6cB1nM8kP5sA3dF9gH2jL",clientId:"host-"+Math.random().toString(16).slice(2)});
+ably.connection.on("connected",function(){connEl.textContent="已連線";publishControl();render()});
+ably.connection.on("disconnected",function(){connEl.textContent="重連中…"});
+ably.connection.on("failed",function(){connEl.textContent="連線失敗";errorEl.textContent="Ably 連線失敗，請檢查網絡"})}
+channel=ably.channels.get("quiz-"+room);
+channel.subscribe("buzz",function(m){acceptBuzz(m.data||{})});
+channel.subscribe("here",function(m){noteHere(m.data||{})});publishControl();render();if(fresh)errorEl.textContent="已開新房 "+room+"。請掃 QR 或複製連結俾選手。"}
+document.getElementById("copy").onclick=async function(){try{await navigator.clipboard.writeText(playerUrl())}catch(e){linkEl.select();document.execCommand("copy")}};
+document.getElementById("clear").onclick=function(){if(!confirm("清空所有分數？"))return;scores={};render();publishControl()};
+document.getElementById("new-room").onclick=function(){var n=makeRoom();if(n===room)n=makeRoom();join(n,true)};
+stage.addEventListener("click",function(e){var b=e.target.closest("[data-act]");if(!b)return;var act=b.getAttribute("data-act");if(act==="open")openRound();else if(act==="hold")holdRound();else if(act==="award")nextRound(true);else if(act==="pass")passToNext()});
+scoresEl.addEventListener("click",function(e){var a=e.target.closest("[data-adj]");if(a){adjustScore(a.getAttribute("data-id"),Number(a.getAttribute("data-adj"))||0)}});
+foulListEl.addEventListener("click",function(e){var f=e.target.closest("[data-forgive]");if(f)forgivePlayer(f.getAttribute("data-forgive"));if(e.target.id==="forgive-all"){forgiven={};fouls=[];publishControl();render()}});
+questionEl.addEventListener("input",function(){question=questionEl.value.slice(0,200);clearTimeout(qTimer);qTimer=setTimeout(publishControl,300)});
+var params=new URLSearchParams(location.search);room=normalizeRoom(params.get("room"))||makeRoom();
+if(typeof Ably==="undefined"){errorEl.textContent="連線元件（Ably）載入失敗。請檢查網絡或關閉廣告拦截後重新整理。";
+  updateQR();
+} else {
+  join(room,false);
+}
 })();
 </script></body></html>
