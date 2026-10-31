@@ -177,7 +177,7 @@ renderStage();renderScores();renderTimeline();renderRecords();renderOnline();ren
 function detach(){if(channel){try{channel.unsubscribe()}catch(e){}}channel=null}
 function join(next,fresh){detach();room=next;seen={};online=[];if(fresh){seq=0;round=1;phase="hold";question="";scores={};buzzes=[];fouls=[];passed={};forgiven={};records=[];answerActive=false;answerUs=0;openedPerf=0;stopAnswerTimers()}
 var url=new URL(location.href);url.search="?room="+room;history.replaceState(null,"",url.pathname+url.search);
-if(!ably){ably=new Ably.Realtime({key:"xVLyHw.5Q0_Vw:H8qJ9vK3mN2pL7rT0wY4zX6cB1nM8kP5sA3dF9gH2jL",clientId:"host-"+Math.random().toString(16).slice(2)});
+if(!ably){ably=new Ably.Realtime({key:"Nta7rA.R_3OIg:p4OAZ8Z8_mgfKaLTDl1rPWiKn7aMb12txQ2H2s8EuLo",clientId:"host-"+Math.random().toString(16).slice(2)});
 ably.connection.on("connected",function(){connEl.textContent="已連線";publishControl();render()});
 ably.connection.on("disconnected",function(){connEl.textContent="重連中…"});
 ably.connection.on("failed",function(){connEl.textContent="連線失敗";errorEl.textContent="Ably 連線失敗，請檢查網絡"})}
